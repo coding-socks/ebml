@@ -2,13 +2,11 @@
 package ebml
 
 import (
-	"bufio"
-	"bytes"
 	"errors"
 	"fmt"
 	"github.com/coding-socks/ebml/vint"
 	"io"
-	"math/big"
+	"io/ioutil"
 	"math/bits"
 )
 
@@ -26,7 +24,7 @@ type Decoder struct {
 	maxSizeLength uint
 
 	// TODO: consider using `io.ByteReader`.
-	r io.ByteReader
+	r io.Reader
 }
 
 // NewDecoder creates a new EBML parser reading from r.
@@ -40,23 +38,20 @@ func NewDecoder(r io.Reader) *Decoder {
 }
 
 func (d *Decoder) switchToReader(r io.Reader) {
-	// Get efficient byte at a time reader.
-	// Assume that if reader has its own
-	// ReadByte, it's efficient enough.
-	// Otherwise, use bufio.
-	if rb, ok := r.(io.ByteReader); ok {
-		d.r = rb
-	} else {
-		d.r = bufio.NewReader(r)
-	}
+	d.r = r
 }
 
-// Element returns the next EBML element in the input stream.
-// At the end of the input stream, Element returns nil, io.EOF.
+func (d *Decoder) skip(el *Element) error {
+	_, err := ioutil.ReadAll(el.Data)
+	return err
+}
+
+// element returns the next EBML Element in the input stream.
+// At the end of the input stream, element returns nil, io.EOF.
 //
 // Element implements EBML specification as described by
 // https://matroska-org.github.io/libebml/specs.html.
-func (d *Decoder) Element() (el Element, err error) {
+func (d *Decoder) element() (el Element, err error) {
 	el.ID, err = d.elementID()
 	if err != nil {
 		return Element{}, err
@@ -89,21 +84,18 @@ func validateID(id *vint.Vint) error {
 
 // The octet length of an Element ID determines its EBML Class.
 func (d *Decoder) elementID() (*vint.Vint, error) {
-	var err error
 	b := make([]byte, d.maxIDLength)
 	// TODO: EBMLMaxIDLength can be greater than 8
 	//   https://tools.ietf.org/html/rfc8794#section-11.2.4
-	if b[0], err = d.r.ReadByte(); err != nil {
+	if _, err := d.r.Read(b[:1]); err != nil {
 		return nil, err
 	}
 	w := bits.LeadingZeros8(b[0]) + 1
 	if w > len(b) {
 		return nil, fmt.Errorf("ebml: invalid length descriptor: %08b", w)
 	}
-	for i := 1; i < w; i++ {
-		if b[i], err = d.r.ReadByte(); err != nil {
-			return nil, err
-		}
+	if _, err := d.r.Read(b[1:w]); err != nil {
+		return nil, err
 	}
 	id := vint.NewVint(b[:w])
 	if err := validateID(id); err != nil {
@@ -113,18 +105,15 @@ func (d *Decoder) elementID() (*vint.Vint, error) {
 }
 
 func (d *Decoder) elementDataSize() (*vint.Vint, error) {
-	var err error
 	b := make([]byte, d.maxSizeLength)
 	// TODO: EBMLMaxSizeLength can be greater than 8
 	//   https://tools.ietf.org/html/rfc8794#section-11.2.5
-	if b[0], err = d.r.ReadByte(); err != nil {
+	if _, err := d.r.Read(b[:1]); err != nil {
 		return nil, err
 	}
 	w := bits.LeadingZeros8(b[0]) + 1
-	for i := 1; i < w; i++ {
-		if b[i], err = d.r.ReadByte(); err != nil {
-			return nil, err
-		}
+	if _, err := d.r.Read(b[1:w]); err != nil {
+		return nil, err
 	}
 	ds := vint.NewVint(b[:w])
 	for _, b := range b[1:w] {
@@ -144,15 +133,5 @@ func (d *Decoder) elementData(ds *vint.Vint) (io.Reader, error) {
 		//  https://tools.ietf.org/html/rfc8794#section-6.2
 		panic("ebml: Unknown data size is not implemented")
 	}
-	var buf bytes.Buffer
-	dataSize := new(big.Int).Set(ds.Data())
-	for dataSize.Cmp(big.NewInt(0)) > 0 {
-		b, err := d.r.ReadByte()
-		if err != nil {
-			return nil, err
-		}
-		buf.WriteByte(b)
-		dataSize = dataSize.Sub(dataSize, big.NewInt(1))
-	}
-	return &buf, nil
+	return io.LimitReader(d.r, ds.Data().Int64()), nil
 }

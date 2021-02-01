@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"io/ioutil"
 	"math"
 	"reflect"
 	"time"
@@ -72,22 +73,29 @@ func (d *Decoder) unmarshal(val reflect.Value) error {
 			return err
 		}
 		for {
-			el, err := d.Element()
+			el, err := d.element()
 			if err != nil {
 				return err
 			}
+			found := false
 			dd := NewDecoder(el.Data)
 			for i := range tinfo.fields {
 				finfo := tinfo.fields[i]
 				if el.ID.Val().Cmp(finfo.name) != 0 {
 					continue
 				}
+				found = true
 				f := val.Field(finfo.idx[0])
 				err := dd.unmarshal(f)
 				if err != nil && err != io.EOF {
 					return err
 				}
 				break
+			}
+			if !found {
+				if err := d.skip(&el); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -142,20 +150,7 @@ func (d *Decoder) unmarshal(val reflect.Value) error {
 }
 
 func (d *Decoder) readByteSlice() ([]byte, error) {
-	var err error
-	var b []byte
-	var bb byte
-	for {
-		bb, err = d.r.ReadByte()
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			}
-			break
-		}
-		b = append(b, bb)
-	}
-	return b, err
+	return ioutil.ReadAll(d.r)
 }
 
 func (d *Decoder) readTime() (time.Time, error) {
