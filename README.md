@@ -12,9 +12,11 @@ An EBML parser written in Go.
 
 Source: https://en.wikipedia.org/wiki/Extensible_Binary_Meta_Language
 
-This implementation is based on the July 2020 version of [RFC 8794][rfc8794]. This RFC which is in a ["PROPOSED STANDARD"](https://www.rfc-editor.org/rfc/rfc2026.html#section-4.1.1) status.
+This implementation is based on the July 2020 version of [RFC 8794][rfc8794]. This RFC is in a ["PROPOSED STANDARD"](https://www.rfc-editor.org/rfc/rfc2026.html#section-4.1.1) status.
 
 ```
+4.1.1  Proposed Standard
+
 [...]
  
     Implementors should treat Proposed Standards as immature  
