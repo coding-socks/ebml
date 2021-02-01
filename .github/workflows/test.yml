@@ -3,12 +3,11 @@ name: test
 on:
   push:
     branches:
-      - 'master'
+      - 'main'
       - 'next'
   pull_request:
     branches:
-      - 'master'
-      - 'next'
+      - '*'
 
 jobs:
   test-generated-files:
