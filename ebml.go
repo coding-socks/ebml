@@ -7,12 +7,13 @@ import (
 	"github.com/coding-socks/ebml/vint"
 	"io"
 	"io/ioutil"
+	"math/big"
 	"math/bits"
 )
 
 type Element struct {
-	ID       *vint.Vint
-	DataSize *vint.Vint
+	ID       *big.Int
+	DataSize *big.Int
 	Data     io.Reader
 }
 
@@ -83,7 +84,7 @@ func validateID(id *vint.Vint) error {
 }
 
 // The octet length of an Element ID determines its EBML Class.
-func (d *Decoder) elementID() (*vint.Vint, error) {
+func (d *Decoder) elementID() (*big.Int, error) {
 	b := make([]byte, d.maxIDLength)
 	// TODO: EBMLMaxIDLength can be greater than 8
 	//   https://tools.ietf.org/html/rfc8794#section-11.2.4
@@ -101,10 +102,10 @@ func (d *Decoder) elementID() (*vint.Vint, error) {
 	if err := validateID(id); err != nil {
 		return nil, err
 	}
-	return id, nil
+	return id.Val(), nil
 }
 
-func (d *Decoder) elementDataSize() (*vint.Vint, error) {
+func (d *Decoder) elementDataSize() (*big.Int, error) {
 	b := make([]byte, d.maxSizeLength)
 	// TODO: EBMLMaxSizeLength can be greater than 8
 	//   https://tools.ietf.org/html/rfc8794#section-11.2.5
@@ -122,16 +123,16 @@ func (d *Decoder) elementDataSize() (*vint.Vint, error) {
 		}
 	}
 	if allOneVint(ds.Data().Bytes(), ds.Width()) {
-		return vint.Inf, nil
+		return nil, nil
 	}
-	return ds, nil
+	return ds.Data(), nil
 }
 
-func (d *Decoder) elementData(ds *vint.Vint) (io.Reader, error) {
-	if ds.IsInf() {
+func (d *Decoder) elementData(ds *big.Int) (io.Reader, error) {
+	if ds == nil {
 		// TODO: Handle unknown data size
 		//  https://tools.ietf.org/html/rfc8794#section-6.2
 		panic("ebml: Unknown data size is not implemented")
 	}
-	return io.LimitReader(d.r, ds.Data().Int64()), nil
+	return io.LimitReader(d.r, ds.Int64()), nil
 }

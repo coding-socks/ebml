@@ -81,7 +81,7 @@ func (d *Decoder) unmarshal(val reflect.Value) error {
 			dd := NewDecoder(el.Data)
 			for i := range tinfo.fields {
 				finfo := tinfo.fields[i]
-				if el.ID.Val().Cmp(finfo.name) != 0 {
+				if el.ID.Cmp(finfo.name) != 0 {
 					continue
 				}
 				found = true
