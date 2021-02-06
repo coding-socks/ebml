@@ -5,8 +5,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"io/ioutil"
+	"log"
 	"math"
+	"math/big"
 	"reflect"
 	"time"
 )
@@ -22,7 +23,7 @@ func (d *Decoder) Decode(v interface{}) error {
 	if val.Kind() != reflect.Ptr {
 		return errors.New("non-pointer passed to Unmarshal")
 	}
-	err := d.unmarshal(val.Elem())
+	err := d.unmarshal(val.Elem(), nil, 0, nil)
 	if err == io.EOF {
 		err = nil
 	}
@@ -35,7 +36,7 @@ var (
 )
 
 // Unmarshal a single EBML element into val.
-func (d *Decoder) unmarshal(val reflect.Value) error {
+func (d *Decoder) unmarshal(val reflect.Value, ds *big.Int, lvl int, parents []fieldInfo) error {
 	// Load value from interface, but only if the result will be
 	// usefully addressable.
 	if val.Kind() == reflect.Interface && !val.IsNil() {
@@ -59,7 +60,7 @@ func (d *Decoder) unmarshal(val reflect.Value) error {
 	case reflect.Struct:
 		typ := v.Type()
 		if typ == timeType {
-			t, err := d.readTime()
+			t, err := d.readTime(ds)
 			if err != nil {
 				return err
 			}
@@ -72,13 +73,17 @@ func (d *Decoder) unmarshal(val reflect.Value) error {
 		if err != nil {
 			return err
 		}
+		start, _ := d.r.Seek(0, io.SeekCurrent)
 		for {
 			el, err := d.element()
 			if err != nil {
+				if err == errInvalidId {
+					continue
+				}
 				return err
 			}
+			log.Printf("===> LVL: %d, ID: 0x%x", lvl, el.ID)
 			found := false
-			dd := NewDecoder(el.Data)
 			for i := range tinfo.fields {
 				finfo := tinfo.fields[i]
 				if el.ID.Cmp(finfo.name) != 0 {
@@ -86,8 +91,8 @@ func (d *Decoder) unmarshal(val reflect.Value) error {
 				}
 				found = true
 				f := val.Field(finfo.idx[0])
-				err := dd.unmarshal(f)
-				if err != nil && err != io.EOF {
+				err := d.unmarshal(f, el.DataSize, lvl+1, append(parents, tinfo.fields...))
+				if err != nil {
 					return err
 				}
 				break
@@ -97,13 +102,28 @@ func (d *Decoder) unmarshal(val reflect.Value) error {
 					return err
 				}
 			}
+			log.Printf("<=== LVL: %d, ID: 0x%x", lvl, el.ID)
+			pos, _ := d.r.Seek(0, io.SeekCurrent)
+			offset := big.NewInt(pos - start)
+			if ds != nil && ds.Cmp(offset) < 1 {
+				return nil
+			} else if ds == nil {
+				for i := range parents {
+					finfo := tinfo.fields[i]
+					if el.ID.Cmp(finfo.name) != 0 {
+						continue
+					}
+					d.elCache = &el
+					return nil
+				}
+			}
 		}
 
 	case reflect.Slice:
 		e := v.Type().Elem()
 		switch e.Kind() {
 		case reflect.Uint8:
-			b, err := d.readByteSlice()
+			b, err := d.readByteSlice(ds)
 			if err != nil {
 				return err
 			}
@@ -112,34 +132,34 @@ func (d *Decoder) unmarshal(val reflect.Value) error {
 		default:
 			n := v.Len()
 			v.Set(reflect.Append(v, reflect.Zero(e)))
-			if err := d.unmarshal(v.Index(n)); err != nil {
+			if err := d.unmarshal(v.Index(n), ds, lvl, parents); err != nil {
 				return err
 			}
 		}
 
 	case reflect.String:
-		s, err := d.readString()
+		s, err := d.readString(ds)
 		if err != nil {
 			return err
 		}
 		v.SetString(s)
 
 	case reflect.Float32, reflect.Float64:
-		f, err := d.readFloat()
+		f, err := d.readFloat(ds)
 		if err != nil {
 			return err
 		}
 		v.SetFloat(f)
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		i, err := d.readInt()
+		i, err := d.readInt(ds)
 		if err != nil {
 			return err
 		}
 		v.SetInt(i)
 
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		i, err := d.readUint()
+		i, err := d.readUint(ds)
 		if err != nil {
 			return err
 		}
@@ -149,20 +169,22 @@ func (d *Decoder) unmarshal(val reflect.Value) error {
 	return nil
 }
 
-func (d *Decoder) readByteSlice() ([]byte, error) {
-	return ioutil.ReadAll(d.r)
+func (d *Decoder) readByteSlice(ds *big.Int) ([]byte, error) {
+	b := make([]byte, ds.Int64())
+	_, err := io.ReadFull(d.r, b)
+	return b, err
 }
 
-func (d *Decoder) readTime() (time.Time, error) {
-	i, err := d.readInt()
+func (d *Decoder) readTime(ds *big.Int) (time.Time, error) {
+	i, err := d.readInt(ds)
 	if err != nil {
 		return time.Time{}, err
 	}
 	return thirdMillennium.Add(time.Nanosecond * time.Duration(i)), nil
 }
 
-func (d *Decoder) readString() (string, error) {
-	b, err := d.readByteSlice()
+func (d *Decoder) readString(ds *big.Int) (string, error) {
+	b, err := d.readByteSlice(ds)
 	if err != nil {
 		return "", err
 	}
@@ -170,8 +192,8 @@ func (d *Decoder) readString() (string, error) {
 	return string(b), err
 }
 
-func (d *Decoder) readFloat() (float64, error) {
-	b, err := d.readByteSlice()
+func (d *Decoder) readFloat(ds *big.Int) (float64, error) {
+	b, err := d.readByteSlice(ds)
 	if err != nil {
 		return 0, err
 	}
@@ -190,8 +212,8 @@ func (d *Decoder) readFloat() (float64, error) {
 	}
 }
 
-func (d *Decoder) readInt() (int64, error) {
-	b, err := d.readByteSlice()
+func (d *Decoder) readInt(ds *big.Int) (int64, error) {
+	b, err := d.readByteSlice(ds)
 	if err != nil {
 		return 0, err
 	}
@@ -205,8 +227,8 @@ func (d *Decoder) readInt() (int64, error) {
 	return i, nil
 }
 
-func (d *Decoder) readUint() (uint64, error) {
-	b, err := d.readByteSlice()
+func (d *Decoder) readUint(ds *big.Int) (uint64, error) {
+	b, err := d.readByteSlice(ds)
 	if err != nil {
 		return 0, err
 	}

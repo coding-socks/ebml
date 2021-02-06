@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/coding-socks/ebml/vint"
 	"io"
-	"io/ioutil"
 	"math/big"
 	"math/bits"
 )
@@ -14,7 +13,6 @@ import (
 type Element struct {
 	ID       *big.Int
 	DataSize *big.Int
-	Data     io.Reader
 }
 
 // A Decoder represents an EBML parser reading a particular input stream.
@@ -25,11 +23,13 @@ type Decoder struct {
 	maxSizeLength uint
 
 	// TODO: consider using `io.ByteReader`.
-	r io.Reader
+	r io.ReadSeeker
+
+	elCache *Element
 }
 
 // NewDecoder creates a new EBML parser reading from r.
-func NewDecoder(r io.Reader) *Decoder {
+func NewDecoder(r io.ReadSeeker) *Decoder {
 	d := &Decoder{
 		maxIDLength:   4,
 		maxSizeLength: 8,
@@ -38,12 +38,12 @@ func NewDecoder(r io.Reader) *Decoder {
 	return d
 }
 
-func (d *Decoder) switchToReader(r io.Reader) {
+func (d *Decoder) switchToReader(r io.ReadSeeker) {
 	d.r = r
 }
 
 func (d *Decoder) skip(el *Element) error {
-	_, err := ioutil.ReadAll(el.Data)
+	_, err := d.r.Seek(el.DataSize.Int64(), io.SeekCurrent)
 	return err
 }
 
@@ -53,15 +53,16 @@ func (d *Decoder) skip(el *Element) error {
 // Element implements EBML specification as described by
 // https://matroska-org.github.io/libebml/specs.html.
 func (d *Decoder) element() (el Element, err error) {
+	if d.elCache != nil {
+		el = *d.elCache
+		d.elCache = nil
+		return el, nil
+	}
 	el.ID, err = d.elementID()
 	if err != nil {
 		return Element{}, err
 	}
 	el.DataSize, err = d.elementDataSize()
-	if err != nil {
-		return Element{}, err
-	}
-	el.Data, err = d.elementData(el.DataSize)
 	if err != nil {
 		return Element{}, err
 	}
@@ -83,6 +84,8 @@ func validateID(id *vint.Vint) error {
 	return nil
 }
 
+var errInvalidId = fmt.Errorf("ebml: invalid length descriptor")
+
 // The octet length of an Element ID determines its EBML Class.
 func (d *Decoder) elementID() (*big.Int, error) {
 	b := make([]byte, d.maxIDLength)
@@ -93,7 +96,7 @@ func (d *Decoder) elementID() (*big.Int, error) {
 	}
 	w := bits.LeadingZeros8(b[0]) + 1
 	if w > len(b) {
-		return nil, fmt.Errorf("ebml: invalid length descriptor: %08b", w)
+		return nil, errInvalidId
 	}
 	if _, err := d.r.Read(b[1:w]); err != nil {
 		return nil, err
@@ -126,13 +129,4 @@ func (d *Decoder) elementDataSize() (*big.Int, error) {
 		return nil, nil
 	}
 	return ds.Data(), nil
-}
-
-func (d *Decoder) elementData(ds *big.Int) (io.Reader, error) {
-	if ds == nil {
-		// TODO: Handle unknown data size
-		//  https://tools.ietf.org/html/rfc8794#section-6.2
-		panic("ebml: Unknown data size is not implemented")
-	}
-	return io.LimitReader(d.r, ds.Int64()), nil
 }

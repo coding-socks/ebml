@@ -2,23 +2,11 @@
 
 package matroska
 
-import "time"
+import (
+	"time"
 
-type DocTypeExtension struct {
-	DocTypeExtensionName    string `ebml:"0x4283"`
-	DocTypeExtensionVersion uint   `ebml:"0x4284"`
-}
-
-type EBML struct {
-	EBMLVersion        uint               `ebml:"0x4286"`
-	EBMLReadVersion    uint               `ebml:"0x42F7"`
-	EBMLMaxIDLength    uint               `ebml:"0x42F2"`
-	EBMLMaxSizeLength  uint               `ebml:"0x42F3"`
-	DocType            string             `ebml:"0x4282"`
-	DocTypeVersion     uint               `ebml:"0x4287"`
-	DocTypeReadVersion uint               `ebml:"0x4285"`
-	DocTypeExtension   []DocTypeExtension `ebml:"0x4281"`
-}
+	"github.com/coding-socks/ebml"
+)
 
 type Seek struct {
 	SeekID       []byte `ebml:"0x53AB"`
@@ -37,19 +25,19 @@ type ChapterTranslate struct {
 
 type Info struct {
 	SegmentUID       []byte             `ebml:"0x73A4"`
-	SegmentFilename  []byte             `ebml:"0x7384"`
+	SegmentFilename  string             `ebml:"0x7384"`
 	PrevUID          []byte             `ebml:"0x3CB923"`
-	PrevFilename     []byte             `ebml:"0x3C83AB"`
+	PrevFilename     string             `ebml:"0x3C83AB"`
 	NextUID          []byte             `ebml:"0x3EB923"`
-	NextFilename     []byte             `ebml:"0x3E83BB"`
+	NextFilename     string             `ebml:"0x3E83BB"`
 	SegmentFamily    [][]byte           `ebml:"0x4444"`
 	ChapterTranslate []ChapterTranslate `ebml:"0x6924"`
 	TimestampScale   uint               `ebml:"0x2AD7B1"`
 	Duration         float64            `ebml:"0x4489"`
 	DateUTC          time.Time          `ebml:"0x4461"`
-	Title            []byte             `ebml:"0x7BA9"`
-	MuxingApp        []byte             `ebml:"0x4D80"`
-	WritingApp       []byte             `ebml:"0x5741"`
+	Title            string             `ebml:"0x7BA9"`
+	MuxingApp        string             `ebml:"0x4D80"`
+	WritingApp       string             `ebml:"0x5741"`
 }
 
 type SilentTracks struct {
@@ -253,14 +241,14 @@ type TrackEntry struct {
 	TrackOffset                 int                    `ebml:"0x537F"`
 	MaxBlockAdditionID          uint                   `ebml:"0x55EE"`
 	BlockAdditionMapping        []BlockAdditionMapping `ebml:"0x41E4"`
-	Name                        []byte                 `ebml:"0x536E"`
+	Name                        string                 `ebml:"0x536E"`
 	Language                    string                 `ebml:"0x22B59C"`
 	LanguageIETF                string                 `ebml:"0x22B59D"`
 	CodecID                     string                 `ebml:"0x86"`
 	CodecPrivate                []byte                 `ebml:"0x63A2"`
-	CodecName                   []byte                 `ebml:"0x258688"`
+	CodecName                   string                 `ebml:"0x258688"`
 	AttachmentLink              uint                   `ebml:"0x7446"`
-	CodecSettings               []byte                 `ebml:"0x3A9697"`
+	CodecSettings               string                 `ebml:"0x3A9697"`
 	CodecInfoURL                []string               `ebml:"0x3B4040"`
 	CodecDownloadURL            []string               `ebml:"0x26B240"`
 	CodecDecodeAll              uint                   `ebml:"0xAA"`
@@ -310,8 +298,8 @@ type Cues struct {
 }
 
 type AttachedFile struct {
-	FileDescription   []byte `ebml:"0x467E"`
-	FileName          []byte `ebml:"0x466E"`
+	FileDescription   string `ebml:"0x467E"`
+	FileName          string `ebml:"0x466E"`
 	FileMimeType      string `ebml:"0x4660"`
 	FileData          []byte `ebml:"0x465C"`
 	FileUID           uint   `ebml:"0x46AE"`
@@ -329,7 +317,7 @@ type ChapterTrack struct {
 }
 
 type ChapterDisplay struct {
-	ChapString       []byte   `ebml:"0x85"`
+	ChapString       string   `ebml:"0x85"`
 	ChapLanguage     []string `ebml:"0x437C"`
 	ChapLanguageIETF []string `ebml:"0x437D"`
 	ChapCountry      []string `ebml:"0x437E"`
@@ -348,7 +336,7 @@ type ChapProcess struct {
 
 type ChapterAtom struct {
 	ChapterUID               uint             `ebml:"0x73C4"`
-	ChapterStringUID         []byte           `ebml:"0x5654"`
+	ChapterStringUID         string           `ebml:"0x5654"`
 	ChapterTimeStart         uint             `ebml:"0x91"`
 	ChapterTimeEnd           uint             `ebml:"0x92"`
 	ChapterFlagHidden        uint             `ebml:"0x98"`
@@ -383,11 +371,11 @@ type Targets struct {
 }
 
 type SimpleTag struct {
-	TagName         []byte `ebml:"0x45A3"`
+	TagName         string `ebml:"0x45A3"`
 	TagLanguage     string `ebml:"0x447A"`
 	TagLanguageIETF string `ebml:"0x447B"`
 	TagDefault      uint   `ebml:"0x4484"`
-	TagString       []byte `ebml:"0x4487"`
+	TagString       string `ebml:"0x4487"`
 	TagBinary       []byte `ebml:"0x4485"`
 }
 
@@ -412,6 +400,6 @@ type Segment struct {
 }
 
 type Document struct {
-	EBML    EBML    `ebml:"0x1A45DFA3"`
-	Segment Segment `ebml:"0x18538067"`
+	EBML    []ebml.EBML `ebml:""`
+	Segment Segment     `ebml:"0x18538067"`
 }

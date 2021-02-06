@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	"github.com/coding-socks/ebml/internal/schema"
 	"golang.org/x/tools/imports"
 	"io"
 	"io/ioutil"
@@ -40,157 +41,17 @@ func main() {
 	}
 }
 
-var (
-	definitionPurpose = "definition"
-	rationalePurpose  = "rationale"
-	referencesPurpose = "references"
-	usageNotesPurpose = "usage notes"
-)
-
-type documentation struct {
-	Content string `xml:",chardata"`
-	Lang    string `xml:"lang,attr"`
-	Purpose string `xml:"purpose"`
-}
-
-var (
-	minOccursNoteAttribute = "minOccurs"
-	maxOccursNoteAttribute = "maxOccurs"
-	rangeNoteAttribute     = "range"
-	lengthNoteAttribute    = "length"
-	defaultNoteAttribute   = "default"
-	minverNoteAttribute    = "minver"
-	maxverNoteAttribute    = "maxver"
-)
-
-type note struct {
-	Content       string `xml:",chardata"`
-	NoteAttribute string `xml:"note_attribute,attr"`
-}
-
-type enum struct {
-	Documentation []documentation `xml:"documentation"`
-	Label         string          `xml:"label,attr"`
-	Value         string          `xml:"value,attr"`
-}
-
-type restriction struct {
-	Enum []enum `xml:"enum"`
-}
-
-type extension struct {
-	Type       string     `xml:"type,attr"`
-	Attributes []xml.Attr `xml:",any,attr"`
-}
-
-var (
-	integerType  = "integer"
-	uintegerType = "uinteger"
-	floatType    = "float"
-	stringType   = "string"
-	dateType     = "date"
-	utf8Type     = "utf-8"
-	masterType   = "master"
-	binaryType   = "binary"
-)
-
-type element struct {
-	Documentation      []documentation `xml:"documentation"`
-	ImplementationNote []note          `xml:"implementation_note"`
-	Restriction        *restriction    `xml:"restriction"`
-	Extension          []extension     `xml:"extension"`
-
-	Name               string `xml:"name,attr"`
-	Path               string `xml:"path,attr"`
-	ID                 string `xml:"id,attr"`
-	MinOccurs          int    `xml:"minOccurs,attr"`
-	MaxOccurs          int    `xml:"maxOccurs,attr"`
-	Range              string `xml:"range,attr"`
-	Length             string `xml:"length,attr"`
-	Default            string `xml:"default,attr"`
-	Type               string `xml:"type,attr"`
-	UnknownSizeAllowed bool   `xml:"unknownsizeallowed,attr"`
-	Recursive          bool   `xml:"recursive,attr"`
-	Recurring          bool   `xml:"recurring,attr"`
-	MinVer             int    `xml:"minver,attr"`
-	MaxVer             int    `xml:"maxver,attr"`
-}
-
-func (s *element) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
-	type fw element // prevent recursion
-	item := fw{
-		MinOccurs: 0, // default="0"
-		// TODO: consider using pointer to differentiate between not set and real value
-		// [...] If the maxOccurs attribute is not present, then there is no
-		// upper bound for the permitted number of occurrences [...]
-		// https://www.rfc-editor.org/rfc/rfc8794#name-maxoccurs
-		MaxOccurs:          0,     // default="1"
-		UnknownSizeAllowed: false, // default="false"
-		Recursive:          false, // default="false"
-		Recurring:          false, // default="false"
-		MinVer:             1,     // default="1"
-	}
-	if err := d.DecodeElement(&item, &start); err != nil {
-		return err
-	}
-	*s = (element)(item)
-	return nil
-}
-
-type schema struct {
-	Element []element `xml:"element"`
-
-	DocType string `xml:"docType,attr"`
-	Version int    `xml:"version,attr"`
-	EBML    uint   `xml:"ebml,attr"`
-}
-
-// https://stackoverflow.com/a/26957888/2231168
-func (s *schema) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
-	type fw schema // prevent recursion
-	item := fw{
-		EBML: 1, // default="1"
-	}
-	if err := d.DecodeElement(&item, &start); err != nil {
-		return err
-	}
-	*s = (schema)(item)
-	return nil
-}
-
-type treeNode struct {
-	el       element
-	children map[string]*treeNode
-	cOrder   []string
-}
-
-func (n *treeNode) Put(key string, el *treeNode) {
-	if _, ok := n.children[key]; !ok {
-		n.cOrder = append(n.cOrder, key)
-	}
-	n.children[key] = el
-}
-
-func (n *treeNode) Get(key string) *treeNode {
-	return n.children[key]
-}
-
-func (n *treeNode) VisitAll(f func(node *treeNode)) {
-	for _, key := range n.cOrder {
-		f(n.children[key])
-	}
-}
-
 func gen(w io.Writer) {
-	root := &treeNode{
-		el: element{
-			Type: masterType,
-			Name: "Document",
-		},
-		children: make(map[string]*treeNode),
-	}
+	root := schema.NewTreeNode(schema.Element{
+		Type: schema.TypeMaster,
+		Name: "Document",
+	})
+	root.Put("EBML", schema.NewTreeNode(schema.Element{
+		Type: "ebml.EBML",
+		Name: "EBML",
+	}))
 	for _, fp := range []string{filepath.Join("..", "ebml.xml"), filepath.Join(".", "ebml_matroska.xml")} {
-		var s schema
+		var s schema.Schema
 		func() {
 			f, err := os.Open(fp)
 			if err != nil {
@@ -206,68 +67,63 @@ func gen(w io.Writer) {
 				// TODO: Implement support for Void and CRC-32 tags
 				continue
 			}
+			if strings.HasPrefix(el.Path, `\EBML`) {
+				continue
+			}
 			p := strings.Split(el.Path, `\`)[1:]
 			branch := root
 			lastIndex := len(p) - 1
 			for _, s := range p[:lastIndex] {
 				node := branch.Get(s)
 				if node == nil {
-					node = &treeNode{
-						children: make(map[string]*treeNode),
-					}
+					node = schema.NewTreeNode(el)
 					branch.Put(s, node)
 				}
 				branch = node
 			}
-			branch.Put(p[lastIndex], &treeNode{
-				el:       el,
-				children: make(map[string]*treeNode),
-			})
+			branch.Put(p[lastIndex], schema.NewTreeNode(el))
 		}
 	}
 	write(w, root)
 }
 
-func write(w io.Writer, node *treeNode) {
-	if node.el.Type != masterType {
+func write(w io.Writer, node *schema.TreeNode) {
+	if node.El.Type != schema.TypeMaster {
 		return
 	}
-	node.VisitAll(func(n *treeNode) {
+	node.VisitAll(func(n *schema.TreeNode) {
 		write(w, n)
 	})
-	fmt.Fprintf(w, "type %s struct {", node.el.Name)
-	node.VisitAll(func(n *treeNode) {
-		if n.el.MaxOccurs != 1 {
-			fmt.Fprintf(w, "\n\t%s []%s `ebml:\"%s\"`", n.el.Name, resolveGoTye(n.el.Type, n.el.Name), n.el.ID)
+	fmt.Fprintf(w, "type %s struct {", node.El.Name)
+	node.VisitAll(func(n *schema.TreeNode) {
+		if n.El.MaxOccurs != 1 {
+			fmt.Fprintf(w, "\n\t%s []%s `ebml:\"%s\"`", n.El.Name, resolveType(n.El.Type, n.El.Name), n.El.ID)
 		} else {
-			fmt.Fprintf(w, "\n\t%s %s `ebml:\"%s\"`", n.el.Name, resolveGoTye(n.el.Type, n.el.Name), n.el.ID)
+			fmt.Fprintf(w, "\n\t%s %s `ebml:\"%s\"`", n.El.Name, resolveType(n.El.Type, n.El.Name), n.El.ID)
 		}
 	})
 	fmt.Fprint(w, "\n}\n\n")
 }
 
-func resolveGoTye(s, name string) string {
+func resolveType(s, name string) string {
 	switch s {
-	case integerType:
+	case schema.TypeInteger:
 		return "int"
-	case uintegerType:
+	case schema.TypeUinteger:
 		return "uint"
-	case floatType:
+	case schema.TypeFloat:
 		return "float64"
-	case stringType:
+	case schema.TypeString:
 		// TODO: Think how should enforce ASCII only characters (in the range of 0x20 to 0x7E).
 		//  https://www.rfc-editor.org/rfc/rfc8794#name-string-element
 		return "string"
-	case dateType:
+	case schema.TypeDate:
 		return "time.Time"
-	case utf8Type:
-		// TODO: documentation states `string` but `[]byte` might be more appropriate
-		//  depending on the length.
-		//  https://www.rfc-editor.org/rfc/rfc8794#name-utf-8-element
-		return "[]byte"
-	case masterType:
+	case schema.TypeUtf8:
+		return "string"
+	case schema.TypeMaster:
 		return name
-	case binaryType:
+	case schema.TypeBinary:
 		return "[]byte"
 	}
 	return s

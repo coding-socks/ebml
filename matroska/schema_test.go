@@ -3,6 +3,7 @@ package matroska
 import (
 	"github.com/coding-socks/ebml"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -72,6 +73,7 @@ func TestDecode(t *testing.T) {
 			if err = ebml.NewDecoder(f).Decode(&d); err != nil {
 				t.Error(err)
 			}
+			log.Printf("%+v %+v", d.EBML, d.Segment.Info)
 		})
 	}
 }
