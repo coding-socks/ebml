@@ -43,6 +43,8 @@ Source: https://www.rfc-editor.org/rfc/rfc2026.html#section-4.1.1
 - [WebM](https://www.webmproject.org/)
 - [WebM Container Guidelines](https://www.webmproject.org/docs/container/)
 
+Huge thanks to the [Matroska.org](https://www.matroska.org/) for their work.
+
 ### IETF Documents
 
 - [RFC 8794: Extensible Binary Meta Language][rfc8794]
