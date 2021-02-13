@@ -34,7 +34,26 @@ func getTypeInfo(typ reflect.Type) (*typeInfo, error) {
 			}
 
 			if f.Anonymous {
-				// TODO: handle embedded structs
+				t := f.Type
+				if t.Kind() == reflect.Ptr {
+					t = t.Elem()
+				}
+				if t.Kind() == reflect.Struct {
+					inner, err := getTypeInfo(t)
+					if err != nil {
+						return nil, err
+					}
+					if tinfo.ebmlID == nil {
+						tinfo.ebmlID = inner.ebmlID
+					}
+					for _, finfo := range inner.fields {
+						finfo.idx = append([]int{i}, finfo.idx...)
+						if err := addFieldInfo(typ, tinfo, &finfo); err != nil {
+							return nil, err
+						}
+					}
+					continue
+				}
 			}
 
 			finfo, err := structFieldInfo(typ, &f)
