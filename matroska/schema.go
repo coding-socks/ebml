@@ -8,19 +8,29 @@ import (
 	"github.com/coding-socks/ebml"
 )
 
-type Seek struct {
-	SeekID       []byte `ebml:"0x53AB"`
-	SeekPosition uint   `ebml:"0x53AC"`
+type Document struct {
+	EBML    []ebml.EBML `ebml:"0x1A45DFA3"`
+	Segment Segment     `ebml:"0x18538067"`
+}
+
+type Segment struct {
+	SeekHead    []SeekHead  `ebml:"0x114D9B74"`
+	Info        Info        `ebml:"0x1549A966"`
+	Cluster     []Cluster   `ebml:"0x1F43B675"`
+	Tracks      Tracks      `ebml:"0x1654AE6B"`
+	Cues        Cues        `ebml:"0x1C53BB6B"`
+	Attachments Attachments `ebml:"0x1941A469"`
+	Chapters    Chapters    `ebml:"0x1043A770"`
+	Tags        []Tags      `ebml:"0x1254C367"`
 }
 
 type SeekHead struct {
 	Seek []Seek `ebml:"0x4DBB"`
 }
 
-type ChapterTranslate struct {
-	ChapterTranslateEditionUID []uint `ebml:"0x69FC"`
-	ChapterTranslateCodec      uint   `ebml:"0x69BF"`
-	ChapterTranslateID         []byte `ebml:"0x69A5"`
+type Seek struct {
+	SeekID       []byte `ebml:"0x53AB"`
+	SeekPosition uint   `ebml:"0x53AC"`
 }
 
 type Info struct {
@@ -40,34 +50,24 @@ type Info struct {
 	WritingApp       string             `ebml:"0x5741"`
 }
 
+type ChapterTranslate struct {
+	ChapterTranslateEditionUID []uint `ebml:"0x69FC"`
+	ChapterTranslateCodec      uint   `ebml:"0x69BF"`
+	ChapterTranslateID         []byte `ebml:"0x69A5"`
+}
+
+type Cluster struct {
+	Timestamp      uint         `ebml:"0xE7"`
+	SilentTracks   SilentTracks `ebml:"0x5854"`
+	Position       uint         `ebml:"0xA7"`
+	PrevSize       uint         `ebml:"0xAB"`
+	SimpleBlock    [][]byte     `ebml:"0xA3"`
+	BlockGroup     []BlockGroup `ebml:"0xA0"`
+	EncryptedBlock [][]byte     `ebml:"0xAF"`
+}
+
 type SilentTracks struct {
 	SilentTrackNumber []uint `ebml:"0x58D7"`
-}
-
-type BlockMore struct {
-	BlockAddID      uint   `ebml:"0xEE"`
-	BlockAdditional []byte `ebml:"0xA5"`
-}
-
-type BlockAdditions struct {
-	BlockMore []BlockMore `ebml:"0xA6"`
-}
-
-type TimeSlice struct {
-	LaceNumber      uint `ebml:"0xCC"`
-	FrameNumber     uint `ebml:"0xCD"`
-	BlockAdditionID uint `ebml:"0xCB"`
-	Delay           uint `ebml:"0xCE"`
-	SliceDuration   uint `ebml:"0xCF"`
-}
-
-type Slices struct {
-	TimeSlice []TimeSlice `ebml:"0xE8"`
-}
-
-type ReferenceFrame struct {
-	ReferenceOffset    uint `ebml:"0xC9"`
-	ReferenceTimestamp uint `ebml:"0xCA"`
 }
 
 type BlockGroup struct {
@@ -84,145 +84,34 @@ type BlockGroup struct {
 	ReferenceFrame    ReferenceFrame `ebml:"0xC8"`
 }
 
-type Cluster struct {
-	Timestamp      uint         `ebml:"0xE7"`
-	SilentTracks   SilentTracks `ebml:"0x5854"`
-	Position       uint         `ebml:"0xA7"`
-	PrevSize       uint         `ebml:"0xAB"`
-	SimpleBlock    [][]byte     `ebml:"0xA3"`
-	BlockGroup     []BlockGroup `ebml:"0xA0"`
-	EncryptedBlock [][]byte     `ebml:"0xAF"`
+type BlockAdditions struct {
+	BlockMore []BlockMore `ebml:"0xA6"`
 }
 
-type BlockAdditionMapping struct {
-	BlockAddIDValue     uint   `ebml:"0x41F0"`
-	BlockAddIDName      string `ebml:"0x41A4"`
-	BlockAddIDType      uint   `ebml:"0x41E7"`
-	BlockAddIDExtraData []byte `ebml:"0x41ED"`
+type BlockMore struct {
+	BlockAddID      uint   `ebml:"0xEE"`
+	BlockAdditional []byte `ebml:"0xA5"`
 }
 
-type TrackTranslate struct {
-	TrackTranslateEditionUID []uint `ebml:"0x66FC"`
-	TrackTranslateCodec      uint   `ebml:"0x66BF"`
-	TrackTranslateTrackID    []byte `ebml:"0x66A5"`
+type Slices struct {
+	TimeSlice []TimeSlice `ebml:"0xE8"`
 }
 
-type MasteringMetadata struct {
-	PrimaryRChromaticityX   float64 `ebml:"0x55D1"`
-	PrimaryRChromaticityY   float64 `ebml:"0x55D2"`
-	PrimaryGChromaticityX   float64 `ebml:"0x55D3"`
-	PrimaryGChromaticityY   float64 `ebml:"0x55D4"`
-	PrimaryBChromaticityX   float64 `ebml:"0x55D5"`
-	PrimaryBChromaticityY   float64 `ebml:"0x55D6"`
-	WhitePointChromaticityX float64 `ebml:"0x55D7"`
-	WhitePointChromaticityY float64 `ebml:"0x55D8"`
-	LuminanceMax            float64 `ebml:"0x55D9"`
-	LuminanceMin            float64 `ebml:"0x55DA"`
+type TimeSlice struct {
+	LaceNumber      uint `ebml:"0xCC"`
+	FrameNumber     uint `ebml:"0xCD"`
+	BlockAdditionID uint `ebml:"0xCB"`
+	Delay           uint `ebml:"0xCE"`
+	SliceDuration   uint `ebml:"0xCF"`
 }
 
-type Colour struct {
-	MatrixCoefficients      uint              `ebml:"0x55B1"`
-	BitsPerChannel          uint              `ebml:"0x55B2"`
-	ChromaSubsamplingHorz   uint              `ebml:"0x55B3"`
-	ChromaSubsamplingVert   uint              `ebml:"0x55B4"`
-	CbSubsamplingHorz       uint              `ebml:"0x55B5"`
-	CbSubsamplingVert       uint              `ebml:"0x55B6"`
-	ChromaSitingHorz        uint              `ebml:"0x55B7"`
-	ChromaSitingVert        uint              `ebml:"0x55B8"`
-	Range                   uint              `ebml:"0x55B9"`
-	TransferCharacteristics uint              `ebml:"0x55BA"`
-	Primaries               uint              `ebml:"0x55BB"`
-	MaxCLL                  uint              `ebml:"0x55BC"`
-	MaxFALL                 uint              `ebml:"0x55BD"`
-	MasteringMetadata       MasteringMetadata `ebml:"0x55D0"`
+type ReferenceFrame struct {
+	ReferenceOffset    uint `ebml:"0xC9"`
+	ReferenceTimestamp uint `ebml:"0xCA"`
 }
 
-type Projection struct {
-	ProjectionType      uint    `ebml:"0x7671"`
-	ProjectionPrivate   []byte  `ebml:"0x7672"`
-	ProjectionPoseYaw   float64 `ebml:"0x7673"`
-	ProjectionPosePitch float64 `ebml:"0x7674"`
-	ProjectionPoseRoll  float64 `ebml:"0x7675"`
-}
-
-type Video struct {
-	FlagInterlaced  uint       `ebml:"0x9A"`
-	FieldOrder      uint       `ebml:"0x9D"`
-	StereoMode      uint       `ebml:"0x53B8"`
-	AlphaMode       uint       `ebml:"0x53C0"`
-	OldStereoMode   uint       `ebml:"0x53B9"`
-	PixelWidth      uint       `ebml:"0xB0"`
-	PixelHeight     uint       `ebml:"0xBA"`
-	PixelCropBottom uint       `ebml:"0x54AA"`
-	PixelCropTop    uint       `ebml:"0x54BB"`
-	PixelCropLeft   uint       `ebml:"0x54CC"`
-	PixelCropRight  uint       `ebml:"0x54DD"`
-	DisplayWidth    uint       `ebml:"0x54B0"`
-	DisplayHeight   uint       `ebml:"0x54BA"`
-	DisplayUnit     uint       `ebml:"0x54B2"`
-	AspectRatioType uint       `ebml:"0x54B3"`
-	ColourSpace     []byte     `ebml:"0x2EB524"`
-	GammaValue      float64    `ebml:"0x2FB523"`
-	FrameRate       float64    `ebml:"0x2383E3"`
-	Colour          Colour     `ebml:"0x55B0"`
-	Projection      Projection `ebml:"0x7670"`
-}
-
-type Audio struct {
-	SamplingFrequency       float64 `ebml:"0xB5"`
-	OutputSamplingFrequency float64 `ebml:"0x78B5"`
-	Channels                uint    `ebml:"0x9F"`
-	ChannelPositions        []byte  `ebml:"0x7D7B"`
-	BitDepth                uint    `ebml:"0x6264"`
-}
-
-type TrackPlane struct {
-	TrackPlaneUID  uint `ebml:"0xE5"`
-	TrackPlaneType uint `ebml:"0xE6"`
-}
-
-type TrackCombinePlanes struct {
-	TrackPlane []TrackPlane `ebml:"0xE4"`
-}
-
-type TrackJoinBlocks struct {
-	TrackJoinUID []uint `ebml:"0xED"`
-}
-
-type TrackOperation struct {
-	TrackCombinePlanes TrackCombinePlanes `ebml:"0xE3"`
-	TrackJoinBlocks    TrackJoinBlocks    `ebml:"0xE9"`
-}
-
-type ContentCompression struct {
-	ContentCompAlgo     uint   `ebml:"0x4254"`
-	ContentCompSettings []byte `ebml:"0x4255"`
-}
-
-type ContentEncAESSettings struct {
-	AESSettingsCipherMode uint `ebml:"0x47E8"`
-}
-
-type ContentEncryption struct {
-	ContentEncAlgo        uint                  `ebml:"0x47E1"`
-	ContentEncKeyID       []byte                `ebml:"0x47E2"`
-	ContentEncAESSettings ContentEncAESSettings `ebml:"0x47E7"`
-	ContentSignature      []byte                `ebml:"0x47E3"`
-	ContentSigKeyID       []byte                `ebml:"0x47E4"`
-	ContentSigAlgo        uint                  `ebml:"0x47E5"`
-	ContentSigHashAlgo    uint                  `ebml:"0x47E6"`
-}
-
-type ContentEncoding struct {
-	ContentEncodingOrder uint               `ebml:"0x5031"`
-	ContentEncodingScope uint               `ebml:"0x5032"`
-	ContentEncodingType  uint               `ebml:"0x5033"`
-	ContentCompression   ContentCompression `ebml:"0x5034"`
-	ContentEncryption    ContentEncryption  `ebml:"0x5035"`
-}
-
-type ContentEncodings struct {
-	ContentEncoding []ContentEncoding `ebml:"0x6240"`
+type Tracks struct {
+	TrackEntry []TrackEntry `ebml:"0xAE"`
 }
 
 type TrackEntry struct {
@@ -267,15 +156,144 @@ type TrackEntry struct {
 	ContentEncodings            ContentEncodings       `ebml:"0x6D80"`
 }
 
-type Tracks struct {
-	TrackEntry []TrackEntry `ebml:"0xAE"`
+type BlockAdditionMapping struct {
+	BlockAddIDValue     uint   `ebml:"0x41F0"`
+	BlockAddIDName      string `ebml:"0x41A4"`
+	BlockAddIDType      uint   `ebml:"0x41E7"`
+	BlockAddIDExtraData []byte `ebml:"0x41ED"`
 }
 
-type CueReference struct {
-	CueRefTime       uint `ebml:"0x96"`
-	CueRefCluster    uint `ebml:"0x97"`
-	CueRefNumber     uint `ebml:"0x535F"`
-	CueRefCodecState uint `ebml:"0xEB"`
+type TrackTranslate struct {
+	TrackTranslateEditionUID []uint `ebml:"0x66FC"`
+	TrackTranslateCodec      uint   `ebml:"0x66BF"`
+	TrackTranslateTrackID    []byte `ebml:"0x66A5"`
+}
+
+type Video struct {
+	FlagInterlaced  uint       `ebml:"0x9A"`
+	FieldOrder      uint       `ebml:"0x9D"`
+	StereoMode      uint       `ebml:"0x53B8"`
+	AlphaMode       uint       `ebml:"0x53C0"`
+	OldStereoMode   uint       `ebml:"0x53B9"`
+	PixelWidth      uint       `ebml:"0xB0"`
+	PixelHeight     uint       `ebml:"0xBA"`
+	PixelCropBottom uint       `ebml:"0x54AA"`
+	PixelCropTop    uint       `ebml:"0x54BB"`
+	PixelCropLeft   uint       `ebml:"0x54CC"`
+	PixelCropRight  uint       `ebml:"0x54DD"`
+	DisplayWidth    uint       `ebml:"0x54B0"`
+	DisplayHeight   uint       `ebml:"0x54BA"`
+	DisplayUnit     uint       `ebml:"0x54B2"`
+	AspectRatioType uint       `ebml:"0x54B3"`
+	ColourSpace     []byte     `ebml:"0x2EB524"`
+	GammaValue      float64    `ebml:"0x2FB523"`
+	FrameRate       float64    `ebml:"0x2383E3"`
+	Colour          Colour     `ebml:"0x55B0"`
+	Projection      Projection `ebml:"0x7670"`
+}
+
+type Colour struct {
+	MatrixCoefficients      uint              `ebml:"0x55B1"`
+	BitsPerChannel          uint              `ebml:"0x55B2"`
+	ChromaSubsamplingHorz   uint              `ebml:"0x55B3"`
+	ChromaSubsamplingVert   uint              `ebml:"0x55B4"`
+	CbSubsamplingHorz       uint              `ebml:"0x55B5"`
+	CbSubsamplingVert       uint              `ebml:"0x55B6"`
+	ChromaSitingHorz        uint              `ebml:"0x55B7"`
+	ChromaSitingVert        uint              `ebml:"0x55B8"`
+	Range                   uint              `ebml:"0x55B9"`
+	TransferCharacteristics uint              `ebml:"0x55BA"`
+	Primaries               uint              `ebml:"0x55BB"`
+	MaxCLL                  uint              `ebml:"0x55BC"`
+	MaxFALL                 uint              `ebml:"0x55BD"`
+	MasteringMetadata       MasteringMetadata `ebml:"0x55D0"`
+}
+
+type MasteringMetadata struct {
+	PrimaryRChromaticityX   float64 `ebml:"0x55D1"`
+	PrimaryRChromaticityY   float64 `ebml:"0x55D2"`
+	PrimaryGChromaticityX   float64 `ebml:"0x55D3"`
+	PrimaryGChromaticityY   float64 `ebml:"0x55D4"`
+	PrimaryBChromaticityX   float64 `ebml:"0x55D5"`
+	PrimaryBChromaticityY   float64 `ebml:"0x55D6"`
+	WhitePointChromaticityX float64 `ebml:"0x55D7"`
+	WhitePointChromaticityY float64 `ebml:"0x55D8"`
+	LuminanceMax            float64 `ebml:"0x55D9"`
+	LuminanceMin            float64 `ebml:"0x55DA"`
+}
+
+type Projection struct {
+	ProjectionType      uint    `ebml:"0x7671"`
+	ProjectionPrivate   []byte  `ebml:"0x7672"`
+	ProjectionPoseYaw   float64 `ebml:"0x7673"`
+	ProjectionPosePitch float64 `ebml:"0x7674"`
+	ProjectionPoseRoll  float64 `ebml:"0x7675"`
+}
+
+type Audio struct {
+	SamplingFrequency       float64 `ebml:"0xB5"`
+	OutputSamplingFrequency float64 `ebml:"0x78B5"`
+	Channels                uint    `ebml:"0x9F"`
+	ChannelPositions        []byte  `ebml:"0x7D7B"`
+	BitDepth                uint    `ebml:"0x6264"`
+}
+
+type TrackOperation struct {
+	TrackCombinePlanes TrackCombinePlanes `ebml:"0xE3"`
+	TrackJoinBlocks    TrackJoinBlocks    `ebml:"0xE9"`
+}
+
+type TrackCombinePlanes struct {
+	TrackPlane []TrackPlane `ebml:"0xE4"`
+}
+
+type TrackPlane struct {
+	TrackPlaneUID  uint `ebml:"0xE5"`
+	TrackPlaneType uint `ebml:"0xE6"`
+}
+
+type TrackJoinBlocks struct {
+	TrackJoinUID []uint `ebml:"0xED"`
+}
+
+type ContentEncodings struct {
+	ContentEncoding []ContentEncoding `ebml:"0x6240"`
+}
+
+type ContentEncoding struct {
+	ContentEncodingOrder uint               `ebml:"0x5031"`
+	ContentEncodingScope uint               `ebml:"0x5032"`
+	ContentEncodingType  uint               `ebml:"0x5033"`
+	ContentCompression   ContentCompression `ebml:"0x5034"`
+	ContentEncryption    ContentEncryption  `ebml:"0x5035"`
+}
+
+type ContentCompression struct {
+	ContentCompAlgo     uint   `ebml:"0x4254"`
+	ContentCompSettings []byte `ebml:"0x4255"`
+}
+
+type ContentEncryption struct {
+	ContentEncAlgo        uint                  `ebml:"0x47E1"`
+	ContentEncKeyID       []byte                `ebml:"0x47E2"`
+	ContentEncAESSettings ContentEncAESSettings `ebml:"0x47E7"`
+	ContentSignature      []byte                `ebml:"0x47E3"`
+	ContentSigKeyID       []byte                `ebml:"0x47E4"`
+	ContentSigAlgo        uint                  `ebml:"0x47E5"`
+	ContentSigHashAlgo    uint                  `ebml:"0x47E6"`
+}
+
+type ContentEncAESSettings struct {
+	AESSettingsCipherMode uint `ebml:"0x47E8"`
+}
+
+type Cues struct {
+	CuePoint []CuePoint `ebml:"0xBB"`
+}
+
+type CuePoint struct {
+	CueTime           uint                `ebml:"0xB3"`
+	CueTrackPositions []CueTrackPositions `ebml:"0xB7"`
 }
 
 type CueTrackPositions struct {
@@ -288,13 +306,15 @@ type CueTrackPositions struct {
 	CueReference        []CueReference `ebml:"0xDB"`
 }
 
-type CuePoint struct {
-	CueTime           uint                `ebml:"0xB3"`
-	CueTrackPositions []CueTrackPositions `ebml:"0xB7"`
+type CueReference struct {
+	CueRefTime       uint `ebml:"0x96"`
+	CueRefCluster    uint `ebml:"0x97"`
+	CueRefNumber     uint `ebml:"0x535F"`
+	CueRefCodecState uint `ebml:"0xEB"`
 }
 
-type Cues struct {
-	CuePoint []CuePoint `ebml:"0xBB"`
+type Attachments struct {
+	AttachedFile []AttachedFile `ebml:"0x61A7"`
 }
 
 type AttachedFile struct {
@@ -308,30 +328,16 @@ type AttachedFile struct {
 	FileUsedEndTime   uint   `ebml:"0x4662"`
 }
 
-type Attachments struct {
-	AttachedFile []AttachedFile `ebml:"0x61A7"`
+type Chapters struct {
+	EditionEntry []EditionEntry `ebml:"0x45B9"`
 }
 
-type ChapterTrack struct {
-	ChapterTrackUID []uint `ebml:"0x89"`
-}
-
-type ChapterDisplay struct {
-	ChapString       string   `ebml:"0x85"`
-	ChapLanguage     []string `ebml:"0x437C"`
-	ChapLanguageIETF []string `ebml:"0x437D"`
-	ChapCountry      []string `ebml:"0x437E"`
-}
-
-type ChapProcessCommand struct {
-	ChapProcessTime uint   `ebml:"0x6922"`
-	ChapProcessData []byte `ebml:"0x6933"`
-}
-
-type ChapProcess struct {
-	ChapProcessCodecID uint                 `ebml:"0x6955"`
-	ChapProcessPrivate []byte               `ebml:"0x450D"`
-	ChapProcessCommand []ChapProcessCommand `ebml:"0x6911"`
+type EditionEntry struct {
+	EditionUID         uint          `ebml:"0x45BC"`
+	EditionFlagHidden  uint          `ebml:"0x45BD"`
+	EditionFlagDefault uint          `ebml:"0x45DB"`
+	EditionFlagOrdered uint          `ebml:"0x45DD"`
+	ChapterAtom        []ChapterAtom `ebml:"0xB6"`
 }
 
 type ChapterAtom struct {
@@ -349,16 +355,35 @@ type ChapterAtom struct {
 	ChapProcess              []ChapProcess    `ebml:"0x6944"`
 }
 
-type EditionEntry struct {
-	EditionUID         uint          `ebml:"0x45BC"`
-	EditionFlagHidden  uint          `ebml:"0x45BD"`
-	EditionFlagDefault uint          `ebml:"0x45DB"`
-	EditionFlagOrdered uint          `ebml:"0x45DD"`
-	ChapterAtom        []ChapterAtom `ebml:"0xB6"`
+type ChapterTrack struct {
+	ChapterTrackUID []uint `ebml:"0x89"`
 }
 
-type Chapters struct {
-	EditionEntry []EditionEntry `ebml:"0x45B9"`
+type ChapterDisplay struct {
+	ChapString       string   `ebml:"0x85"`
+	ChapLanguage     []string `ebml:"0x437C"`
+	ChapLanguageIETF []string `ebml:"0x437D"`
+	ChapCountry      []string `ebml:"0x437E"`
+}
+
+type ChapProcess struct {
+	ChapProcessCodecID uint                 `ebml:"0x6955"`
+	ChapProcessPrivate []byte               `ebml:"0x450D"`
+	ChapProcessCommand []ChapProcessCommand `ebml:"0x6911"`
+}
+
+type ChapProcessCommand struct {
+	ChapProcessTime uint   `ebml:"0x6922"`
+	ChapProcessData []byte `ebml:"0x6933"`
+}
+
+type Tags struct {
+	Tag []Tag `ebml:"0x7373"`
+}
+
+type Tag struct {
+	Targets   Targets     `ebml:"0x63C0"`
+	SimpleTag []SimpleTag `ebml:"0x67C8"`
 }
 
 type Targets struct {
@@ -377,29 +402,4 @@ type SimpleTag struct {
 	TagDefault      uint   `ebml:"0x4484"`
 	TagString       string `ebml:"0x4487"`
 	TagBinary       []byte `ebml:"0x4485"`
-}
-
-type Tag struct {
-	Targets   Targets     `ebml:"0x63C0"`
-	SimpleTag []SimpleTag `ebml:"0x67C8"`
-}
-
-type Tags struct {
-	Tag []Tag `ebml:"0x7373"`
-}
-
-type Segment struct {
-	SeekHead    []SeekHead  `ebml:"0x114D9B74"`
-	Info        Info        `ebml:"0x1549A966"`
-	Cluster     []Cluster   `ebml:"0x1F43B675"`
-	Tracks      Tracks      `ebml:"0x1654AE6B"`
-	Cues        Cues        `ebml:"0x1C53BB6B"`
-	Attachments Attachments `ebml:"0x1941A469"`
-	Chapters    Chapters    `ebml:"0x1043A770"`
-	Tags        []Tags      `ebml:"0x1254C367"`
-}
-
-type Document struct {
-	EBML    []ebml.EBML `ebml:""`
-	Segment Segment     `ebml:"0x18538067"`
 }

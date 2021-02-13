@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"log"
 	"math"
 	"math/big"
 	"reflect"
@@ -23,7 +22,7 @@ func (d *Decoder) Decode(v interface{}) error {
 	if val.Kind() != reflect.Ptr {
 		return errors.New("non-pointer passed to Unmarshal")
 	}
-	err := d.unmarshal(val.Elem(), nil, 0, nil)
+	err := d.unmarshal(val.Elem(), nil, nil)
 	if err == io.EOF {
 		err = nil
 	}
@@ -36,7 +35,7 @@ var (
 )
 
 // Unmarshal a single EBML element into val.
-func (d *Decoder) unmarshal(val reflect.Value, ds *big.Int, lvl int, parents []fieldInfo) error {
+func (d *Decoder) unmarshal(val reflect.Value, ds *big.Int, parents []fieldInfo) error {
 	// Load value from interface, but only if the result will be
 	// usefully addressable.
 	if val.Kind() == reflect.Interface && !val.IsNil() {
@@ -82,7 +81,6 @@ func (d *Decoder) unmarshal(val reflect.Value, ds *big.Int, lvl int, parents []f
 				}
 				return err
 			}
-			log.Printf("===> LVL: %d, ID: 0x%x", lvl, el.ID)
 			found := false
 			for i := range tinfo.fields {
 				finfo := tinfo.fields[i]
@@ -91,7 +89,7 @@ func (d *Decoder) unmarshal(val reflect.Value, ds *big.Int, lvl int, parents []f
 				}
 				found = true
 				f := val.Field(finfo.idx[0])
-				err := d.unmarshal(f, el.DataSize, lvl+1, append(parents, tinfo.fields...))
+				err := d.unmarshal(f, el.DataSize, append(parents, tinfo.fields...))
 				if err != nil {
 					return err
 				}
@@ -102,7 +100,6 @@ func (d *Decoder) unmarshal(val reflect.Value, ds *big.Int, lvl int, parents []f
 					return err
 				}
 			}
-			log.Printf("<=== LVL: %d, ID: 0x%x", lvl, el.ID)
 			pos, _ := d.r.Seek(0, io.SeekCurrent)
 			offset := big.NewInt(pos - start)
 			if ds != nil && ds.Cmp(offset) < 1 {
@@ -132,7 +129,7 @@ func (d *Decoder) unmarshal(val reflect.Value, ds *big.Int, lvl int, parents []f
 		default:
 			n := v.Len()
 			v.Set(reflect.Append(v, reflect.Zero(e)))
-			if err := d.unmarshal(v.Index(n), ds, lvl, parents); err != nil {
+			if err := d.unmarshal(v.Index(n), ds, parents); err != nil {
 				return err
 			}
 		}

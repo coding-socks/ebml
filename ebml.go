@@ -1,3 +1,5 @@
+//go:generate go run make_header.go
+
 // Package ebml implements a simple EBML parser.
 package ebml
 

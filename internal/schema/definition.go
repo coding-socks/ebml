@@ -6,7 +6,10 @@
 // Internal use only.
 package schema
 
-import "encoding/xml"
+import (
+	"encoding/xml"
+	"reflect"
+)
 
 var (
 	PurposeDefinition = "definition"
@@ -151,4 +154,28 @@ func (n *TreeNode) VisitAll(f func(node *TreeNode)) {
 	for _, key := range n.order {
 		f(n.children[key])
 	}
+}
+
+func ResolveGoType(s, name string) string {
+	switch s {
+	case TypeInteger:
+		return reflect.Int.String()
+	case TypeUinteger:
+		return reflect.Uint.String()
+	case TypeFloat:
+		return reflect.Float64.String()
+	case TypeString:
+		// TODO: Think how should enforce ASCII only characters (in the range of 0x20 to 0x7E).
+		//  https://www.rfc-editor.org/rfc/rfc8794#name-string-element
+		return reflect.String.String()
+	case TypeDate:
+		return "time.Time"
+	case TypeUtf8:
+		return reflect.String.String()
+	case TypeMaster:
+		return name
+	case TypeBinary:
+		return "[]byte"
+	}
+	return s
 }
