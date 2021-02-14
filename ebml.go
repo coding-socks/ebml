@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/coding-socks/ebml/vint"
 	"io"
+	"io/ioutil"
 	"math/big"
 	"math/bits"
 )
@@ -24,14 +25,28 @@ type Decoder struct {
 	// https://tools.ietf.org/html/rfc8794#section-11.2.5
 	maxSizeLength uint
 
-	// TODO: consider using `io.ByteReader`.
-	r io.ReadSeeker
+	r *Reader
 
 	elCache *Element
 }
 
+type Reader struct {
+	pos int64
+	r   io.Reader
+}
+
+func (r *Reader) Position() int64 {
+	return r.pos
+}
+
+func (r *Reader) Read(p []byte) (n int, err error) {
+	n, err = r.r.Read(p)
+	r.pos += int64(n)
+	return n, err
+}
+
 // NewDecoder creates a new EBML parser reading from r.
-func NewDecoder(r io.ReadSeeker) *Decoder {
+func NewDecoder(r io.Reader) *Decoder {
 	d := &Decoder{
 		maxIDLength:   4,
 		maxSizeLength: 8,
@@ -40,12 +55,12 @@ func NewDecoder(r io.ReadSeeker) *Decoder {
 	return d
 }
 
-func (d *Decoder) switchToReader(r io.ReadSeeker) {
-	d.r = r
+func (d *Decoder) switchToReader(r io.Reader) {
+	d.r = &Reader{r: r}
 }
 
 func (d *Decoder) skip(el *Element) error {
-	_, err := d.r.Seek(el.DataSize.Int64(), io.SeekCurrent)
+	_, err := io.CopyN(ioutil.Discard, d.r, el.DataSize.Int64())
 	return err
 }
 

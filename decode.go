@@ -72,7 +72,7 @@ func (d *Decoder) unmarshal(val reflect.Value, ds *big.Int, parents []fieldInfo)
 		if err != nil {
 			return err
 		}
-		start, _ := d.r.Seek(0, io.SeekCurrent)
+		start := d.r.Position()
 		for {
 			el, err := d.element()
 			if err != nil {
@@ -100,7 +100,7 @@ func (d *Decoder) unmarshal(val reflect.Value, ds *big.Int, parents []fieldInfo)
 					return err
 				}
 			}
-			pos, _ := d.r.Seek(0, io.SeekCurrent)
+			pos := d.r.Position()
 			offset := big.NewInt(pos - start)
 			if ds != nil && ds.Cmp(offset) < 1 {
 				return nil
