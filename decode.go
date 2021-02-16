@@ -5,8 +5,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"log"
 	"math"
-	"math/big"
 	"reflect"
 	"time"
 )
@@ -15,18 +15,50 @@ func Unmarshal(data []byte, v interface{}) error {
 	return NewDecoder(bytes.NewReader(data)).Decode(v)
 }
 
+// An InvalidUnmarshalError describes an invalid argument passed to Unmarshal.
+// (The argument to Unmarshal must be a non-nil pointer.)
+type InvalidUnmarshalError struct {
+	Type reflect.Type
+}
+
+func (e *InvalidUnmarshalError) Error() string {
+	if e.Type == nil {
+		return "ebml: Unmarshal(nil)"
+	}
+
+	if e.Type.Kind() != reflect.Ptr {
+		return "ebml: Unmarshal(non-pointer " + e.Type.String() + ")"
+	}
+	return "ebml: Unmarshal(nil " + e.Type.String() + ")"
+}
+
 // Decode works like Unmarshal, except it reads the decoder
 // stream.
 func (d *Decoder) Decode(v interface{}) error {
 	val := reflect.ValueOf(v)
-	if val.Kind() != reflect.Ptr {
-		return errors.New("non-pointer passed to Unmarshal")
+	if val.Kind() != reflect.Ptr || val.IsNil() {
+		return &InvalidUnmarshalError{reflect.TypeOf(v)}
 	}
-	err := d.unmarshal(val.Elem(), nil, nil)
-	if err == io.EOF {
-		err = nil
+
+	if err := d.decodeRoot(val.Elem(), headerDefinition); err != nil {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+		return err
 	}
-	return err
+	// TODO: read doctype from header
+	bodyDef, err := getDefinition("matroska")
+	if err != nil {
+		return err
+	}
+	if err := d.decodeRoot(val.Elem(), bodyDef); err != nil {
+		if err == io.EOF {
+			err = nil
+		}
+		return err
+	}
+	// TODO: decode body / segment
+	return nil
 }
 
 var (
@@ -34,8 +66,65 @@ var (
 	thirdMillennium = time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
 )
 
-// Unmarshal a single EBML element into val.
-func (d *Decoder) unmarshal(val reflect.Value, ds *big.Int, parents []fieldInfo) error {
+func findField(val reflect.Value, tinfo *typeInfo, name string) (fieldv reflect.Value, found bool) {
+	for i := range tinfo.fields {
+		finfo := tinfo.fields[i]
+		if name != finfo.name {
+			continue
+		}
+		found = true
+		fieldv = val.Field(finfo.idx[0])
+		break
+	}
+	return
+}
+
+func (d *Decoder) decodeRoot(val reflect.Value, def Definition) error {
+	// Load value from interface, but only if the result will be
+	// usefully addressable.
+	if val.Kind() == reflect.Interface && !val.IsNil() {
+		e := val.Elem()
+		if e.Kind() == reflect.Ptr && !e.IsNil() {
+			val = e
+		}
+	}
+
+	if val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			val.Set(reflect.New(val.Type().Elem()))
+		}
+		val = val.Elem()
+	}
+	el, err := d.element([]Definition{def})
+	if err != nil {
+		return err
+	}
+	if bytes.Compare(el.Definition.ID, CRC32.ID) == 0 {
+		return errors.New("ebml: unexpected crc-32 element")
+	}
+	if bytes.Compare(el.Definition.ID, Void.ID) == 0 {
+		// TODO: skip void elements
+		return errors.New("ebml: unexpected void element")
+	}
+	log.Printf("=> 0x%s", el.HexID())
+	if val.Kind() != reflect.Struct {
+		return errors.New("ebml: unknown root element type: " + val.Type().String())
+	}
+	typ := val.Type()
+	tinfo, err := getTypeInfo(typ)
+	if err != nil {
+		return err
+	}
+	fieldv, found := findField(val, tinfo, el.Definition.Name)
+
+	if err := d.decodeSingle(el, found, fieldv, el.Definition.Children); err != nil {
+		return err
+	}
+	log.Printf("<= 0x%s", el.HexID())
+	return nil
+}
+
+func (d *Decoder) decodeMaster(val reflect.Value, ds dataSize, defs []Definition) error {
 	// Load value from interface, but only if the result will be
 	// usefully addressable.
 	if val.Kind() == reflect.Interface && !val.IsNil() {
@@ -52,127 +141,140 @@ func (d *Decoder) unmarshal(val reflect.Value, ds *big.Int, parents []fieldInfo)
 		val = val.Elem()
 	}
 
-	switch v := val; v.Kind() {
-	default:
-		return errors.New("unknown type " + v.Type().String())
-
-	case reflect.Struct:
-		typ := v.Type()
-		if typ == timeType {
-			t, err := d.readTime(ds)
-			if err != nil {
-				return err
+	start := d.r.Position()
+	for {
+		// Check size first because it can be 0
+		if ds.Known() {
+			offset := d.r.Position() - start
+			if offset > ds.Size() {
+				return errors.New("ebml: element overflow")
+			} else if offset == ds.Size() {
+				return nil
 			}
-			v.Set(reflect.ValueOf(t))
-
-			break
 		}
 
+		el, err := d.element(defs)
+		if err != nil {
+			if err == errInvalidId {
+				continue
+			}
+			var e *UnknownElementError
+			if !ds.Known() && errors.As(err, &e) {
+				d.elCache = &e.el
+				return nil
+			}
+			return err
+		}
+		log.Printf("==> 0x%s", el.HexID())
+		switch v := val; v.Kind() {
+		default:
+			return errors.New("unknown master element type: " + val.Type().String())
+		case reflect.Slice:
+			// TODO: Consider checking max / min occurrence.
+			e := v.Type().Elem()
+			n := v.Len()
+			v.Set(reflect.Append(v, reflect.Zero(e)))
+			val = v.Index(n)
+		case reflect.Struct:
+			// Everything is ok
+		}
+		typ := val.Type()
 		tinfo, err := getTypeInfo(typ)
 		if err != nil {
 			return err
 		}
-		start := d.r.Position()
-		for {
-			el, err := d.element()
-			if err != nil {
-				if err == errInvalidId {
-					continue
-				}
-				return err
-			}
-			found := false
-			for i := range tinfo.fields {
-				finfo := tinfo.fields[i]
-				if el.ID.Cmp(finfo.name) != 0 {
-					continue
-				}
-				found = true
-				f := val.Field(finfo.idx[0])
-				err := d.unmarshal(f, el.DataSize, append(parents, tinfo.fields...))
-				if err != nil {
-					return err
-				}
-				break
-			}
-			if !found {
-				if err := d.skip(&el); err != nil {
-					return err
-				}
-			}
-			pos := d.r.Position()
-			offset := big.NewInt(pos - start)
-			if ds != nil && ds.Cmp(offset) < 1 {
-				return nil
-			} else if ds == nil {
-				for i := range parents {
-					finfo := tinfo.fields[i]
-					if el.ID.Cmp(finfo.name) != 0 {
-						continue
-					}
-					d.elCache = &el
-					return nil
-				}
-			}
+		fieldv, found := findField(val, tinfo, el.Definition.Name)
+
+		if err := d.decodeSingle(el, found, fieldv, el.Definition.Children); err != nil {
+			return err
 		}
+		log.Printf("<== 0x%s", el.HexID())
+	}
+}
 
-	case reflect.Slice:
+func (d *Decoder) decodeSingle(el Element, found bool, val reflect.Value, defs []Definition) error {
+	if v := val; v.Kind() == reflect.Slice {
 		e := v.Type().Elem()
-		switch e.Kind() {
-		case reflect.Uint8:
-			b, err := d.readByteSlice(ds)
-			if err != nil {
-				return err
-			}
-			v.SetBytes(b)
-
-		default:
+		// TODO: Consider using `el.Definition.Type != TypeBinary || e.Kind() != reflect.Uint8`.
+		if !(el.Definition.Type == TypeBinary && e.Kind() == reflect.Uint8) {
 			n := v.Len()
 			v.Set(reflect.Append(v, reflect.Zero(e)))
-			if err := d.unmarshal(v.Index(n), ds, parents); err != nil {
-				return err
-			}
+			val = v.Index(n)
 		}
-
-	case reflect.String:
-		s, err := d.readString(ds)
-		if err != nil {
-			return err
-		}
-		v.SetString(s)
-
-	case reflect.Float32, reflect.Float64:
-		f, err := d.readFloat(ds)
-		if err != nil {
-			return err
-		}
-		v.SetFloat(f)
-
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		i, err := d.readInt(ds)
-		if err != nil {
-			return err
-		}
-		v.SetInt(i)
-
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		i, err := d.readUint(ds)
-		if err != nil {
-			return err
-		}
-		v.SetUint(i)
 	}
+	switch el.Definition.Type {
+	default:
+		return errors.New("ebml: unknown type: " + el.Definition.Type)
 
+	case TypeMaster:
+		if err := d.decodeMaster(val, el.DataSize, defs); err != nil {
+			return err
+		}
+
+	case TypeBinary:
+		b, err := d.readByteSlice(el.DataSize.Size())
+		if err != nil {
+			return err
+		}
+		if found {
+			val.SetBytes(b)
+		}
+
+	case TypeDate:
+		t, err := d.readDate(el.DataSize.Size())
+		if err != nil {
+			return err
+		}
+		if found {
+			val.Set(reflect.ValueOf(t))
+		}
+
+	case TypeFloat:
+		f, err := d.readFloat(el.DataSize.Size())
+		if err != nil {
+			return err
+		}
+		if found {
+			val.SetFloat(f)
+		}
+
+	case TypeInteger:
+		i, err := d.readInt(el.DataSize.Size())
+		if err != nil {
+			return err
+		}
+		if found {
+			val.SetInt(i)
+		}
+
+	case TypeUinteger:
+		i, err := d.readUint(el.DataSize.Size())
+		if err != nil {
+			return err
+		}
+		if found {
+			val.SetUint(i)
+		}
+
+	case TypeString, TypeUTF8:
+		str, err := d.readString(el.DataSize.Size())
+		if err != nil {
+			return err
+		}
+		if found {
+			val.SetString(str)
+		}
+	}
 	return nil
 }
 
-func (d *Decoder) readByteSlice(ds *big.Int) ([]byte, error) {
-	b := make([]byte, ds.Int64())
+func (d *Decoder) readByteSlice(ds int64) ([]byte, error) {
+	b := make([]byte, ds)
 	_, err := io.ReadFull(d.r, b)
 	return b, err
 }
 
-func (d *Decoder) readTime(ds *big.Int) (time.Time, error) {
+func (d *Decoder) readDate(ds int64) (time.Time, error) {
 	i, err := d.readInt(ds)
 	if err != nil {
 		return time.Time{}, err
@@ -180,7 +282,7 @@ func (d *Decoder) readTime(ds *big.Int) (time.Time, error) {
 	return thirdMillennium.Add(time.Nanosecond * time.Duration(i)), nil
 }
 
-func (d *Decoder) readString(ds *big.Int) (string, error) {
+func (d *Decoder) readString(ds int64) (string, error) {
 	b, err := d.readByteSlice(ds)
 	if err != nil {
 		return "", err
@@ -189,7 +291,7 @@ func (d *Decoder) readString(ds *big.Int) (string, error) {
 	return string(b), err
 }
 
-func (d *Decoder) readFloat(ds *big.Int) (float64, error) {
+func (d *Decoder) readFloat(ds int64) (float64, error) {
 	b, err := d.readByteSlice(ds)
 	if err != nil {
 		return 0, err
@@ -209,7 +311,7 @@ func (d *Decoder) readFloat(ds *big.Int) (float64, error) {
 	}
 }
 
-func (d *Decoder) readInt(ds *big.Int) (int64, error) {
+func (d *Decoder) readInt(ds int64) (int64, error) {
 	b, err := d.readByteSlice(ds)
 	if err != nil {
 		return 0, err
@@ -224,7 +326,7 @@ func (d *Decoder) readInt(ds *big.Int) (int64, error) {
 	return i, nil
 }
 
-func (d *Decoder) readUint(ds *big.Int) (uint64, error) {
+func (d *Decoder) readUint(ds int64) (uint64, error) {
 	b, err := d.readByteSlice(ds)
 	if err != nil {
 		return 0, err

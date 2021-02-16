@@ -34,6 +34,11 @@ func TestDecode(t *testing.T) {
 		source   string
 	}{
 		{
+			name:     "Basic file",
+			filename: "test1.mkv",
+			source:   "https://github.com/Matroska-Org/matroska-test-files/blob/master/test_files/test1.mkv?raw=true",
+		},
+		{
 			name:     "Live stream recording",
 			filename: "test4.mkv",
 			source:   "https://github.com/Matroska-Org/matroska-test-files/blob/master/test_files/test4.mkv?raw=true",
@@ -73,7 +78,8 @@ func TestDecode(t *testing.T) {
 			if err = ebml.NewDecoder(f).Decode(&d); err != nil {
 				t.Error(err)
 			}
-			log.Printf("%+v %+v", d.EBML, d.Segment.Info)
+			log.Printf("%+v", d.EBML)
+			// log.Printf("%+v %+v", d["EBML"], d["Segment"].(map[string]interface{})["Info"])
 		})
 	}
 }

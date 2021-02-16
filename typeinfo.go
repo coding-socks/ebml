@@ -2,7 +2,6 @@ package ebml
 
 import (
 	"errors"
-	"math/big"
 	"reflect"
 )
 
@@ -15,7 +14,7 @@ type typeInfo struct {
 // fieldInfo holds details for the ebml representation of a single field.
 type fieldInfo struct {
 	idx     []int
-	name    *big.Int
+	name    string
 	parents []string
 }
 
@@ -76,12 +75,10 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 
 	tag := f.Tag.Get("ebml")
 
-	// TODO: Parse flags here. No flags for now.
-
 	// TODO: Parse nested structure. Not allowed for now.
-	name, ok := big.NewInt(0).SetString(tag, 0)
-	if !ok {
-		return nil, errors.New("ebml: cannot read ID from tag")
+	name := tag
+	if name == "" {
+		name = f.Name
 	}
 	finfo.name = name
 
@@ -110,3 +107,14 @@ func addFieldInfo(typ reflect.Type, tinfo *typeInfo, newf *fieldInfo) error {
 	// TODO: implement addFieldInfo
 	return errors.New("ebml: conflict handling is not implemented")
 }
+
+var (
+	TypeInteger  = "integer"
+	TypeUinteger = "uinteger"
+	TypeFloat    = "float"
+	TypeString   = "string"
+	TypeDate     = "date"
+	TypeUTF8     = "utf-8"
+	TypeMaster   = "master"
+	TypeBinary   = "binary"
+)

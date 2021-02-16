@@ -156,6 +156,29 @@ func (n *TreeNode) VisitAll(f func(node *TreeNode)) {
 	}
 }
 
+func ResolveType(t string) string {
+	switch t {
+	default:
+		return t
+	case "utf-8":
+		return "TypeUTF8"
+	case "date":
+		return "TypeDate"
+	case "binary":
+		return "TypeBinary"
+	case "float":
+		return "TypeFloat"
+	case "string":
+		return "TypeString"
+	case "integer":
+		return "TypeInteger"
+	case "uinteger":
+		return "TypeUinteger"
+	case "master":
+		return "TypeMaster"
+	}
+}
+
 func ResolveGoType(s, name string) string {
 	switch s {
 	case TypeInteger:
