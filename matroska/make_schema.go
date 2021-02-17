@@ -110,16 +110,17 @@ func write(w io.Writer, node *schema.TreeNode) {
 }
 
 func writeDocType(w io.Writer, node *schema.TreeNode, root bool) {
-	id := strings.TrimPrefix(node.El.ID, "0x")
 	def := node.El.Default
 	if def == "" {
 		def = "nil"
 	} else if node.El.Type == schema.TypeString {
 		def = fmt.Sprintf("%q", def)
+	} else {
+		def = fmt.Sprintf("%s(%v)", schema.ResolveGoType(node.El.Type, node.El.Name), def)
 	}
 	fmt.Fprintf(
 		w, "\n\tebml.NewDefinition(%[2]q, ebml.%[3]s, \"%[1]s\", %[4]s, ",
-		node.El.Name, id, schema.ResolveType(node.El.Type), def,
+		node.El.Name, node.El.ID, schema.ResolveType(node.El.Type), def,
 	)
 	if node.El.Type == schema.TypeMaster {
 		fmt.Fprint(w, "[]ebml.Definition{")

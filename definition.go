@@ -2,10 +2,13 @@
 
 package ebml
 
-import "encoding/hex"
+import (
+	"encoding/hex"
+	"strings"
+)
 
 type Definition struct {
-	ID       []byte
+	ID       string
 	Type     string
 	Name     string
 	Default  interface{}
@@ -13,23 +16,24 @@ type Definition struct {
 }
 
 func NewDefinition(id string, t, name string, def interface{}, children []Definition) Definition {
-	bid, err := hex.DecodeString(id)
+	id = strings.TrimPrefix(id, "0x")
+	_, err := hex.DecodeString(id)
 	if err != nil {
 		panic(err)
 	}
-	return Definition{ID: bid, Type: t, Name: name, Default: def, Children: children}
+	return Definition{ID: strings.ToLower(id), Type: t, Name: name, Default: def, Children: children}
 }
 
-var headerDefinition = NewDefinition("1A45DFA3", TypeMaster, "EBML", nil, []Definition{
-	NewDefinition("4286", TypeUinteger, "EBMLVersion", 1, nil),
-	NewDefinition("42F7", TypeUinteger, "EBMLReadVersion", 1, nil),
-	NewDefinition("42F2", TypeUinteger, "EBMLMaxIDLength", 4, nil),
-	NewDefinition("42F3", TypeUinteger, "EBMLMaxSizeLength", 8, nil),
-	NewDefinition("4282", TypeString, "DocType", "ebml", nil),
-	NewDefinition("4287", TypeUinteger, "DocTypeVersion", 1, nil),
-	NewDefinition("4285", TypeUinteger, "DocTypeReadVersion", 1, nil),
-	NewDefinition("4281", TypeMaster, "DocTypeExtension", nil, []Definition{
-		NewDefinition("4283", TypeString, "DocTypeExtensionName", nil, nil),
-		NewDefinition("4284", TypeUinteger, "DocTypeExtensionVersion", nil, nil),
+var headerDefinition = NewDefinition("0x1A45DFA3", TypeMaster, "EBML", nil, []Definition{
+	NewDefinition("0x4286", TypeUinteger, "EBMLVersion", uint(1), nil),
+	NewDefinition("0x42F7", TypeUinteger, "EBMLReadVersion", uint(1), nil),
+	NewDefinition("0x42F2", TypeUinteger, "EBMLMaxIDLength", uint(4), nil),
+	NewDefinition("0x42F3", TypeUinteger, "EBMLMaxSizeLength", uint(8), nil),
+	NewDefinition("0x4282", TypeString, "DocType", "ebml", nil),
+	NewDefinition("0x4287", TypeUinteger, "DocTypeVersion", uint(1), nil),
+	NewDefinition("0x4285", TypeUinteger, "DocTypeReadVersion", uint(1), nil),
+	NewDefinition("0x4281", TypeMaster, "DocTypeExtension", nil, []Definition{
+		NewDefinition("0x4283", TypeString, "DocTypeExtensionName", nil, nil),
+		NewDefinition("0x4284", TypeUinteger, "DocTypeExtensionVersion", nil, nil),
 	}),
 })

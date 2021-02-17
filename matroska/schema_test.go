@@ -26,12 +26,11 @@ func downloadTestFile(filename, source string) error {
 }
 
 func TestDecode(t *testing.T) {
-	var err error
-	var f *os.File
-	testFiles := []struct {
+	tests := []struct {
 		name     string
 		filename string
 		source   string
+		wantErr  bool
 	}{
 		{
 			name:     "Basic file",
@@ -54,24 +53,19 @@ func TestDecode(t *testing.T) {
 			source:   "https://github.com/Matroska-Org/matroska-test-files/blob/master/test_files/test6.mkv?raw=true",
 		},
 	}
-	for _, tt := range testFiles {
-		p := filepath.Join(".", tt.filename)
-		_, err := os.Stat(p)
-		if err == nil {
-			continue
-		}
-		if !os.IsNotExist(err) {
-			t.Fatal(err)
-		}
-		if err := downloadTestFile(tt.filename, tt.source); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, tt := range testFiles {
+	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f, err = os.Open(filepath.Join(".", tt.filename))
+			f, err := os.Open(filepath.Join(".", tt.filename))
 			if err != nil {
-				t.Fatal(err)
+				if !os.IsNotExist(err) {
+					t.Fatal(err)
+				}
+				if err := downloadTestFile(tt.filename, tt.source); err != nil {
+					t.Fatal(err)
+				}
+				if f, err = os.Open(filepath.Join(".", tt.filename)); err != nil {
+					t.Fatal(err)
+				}
 			}
 			defer f.Close()
 			var d Document
@@ -79,7 +73,6 @@ func TestDecode(t *testing.T) {
 				t.Error(err)
 			}
 			log.Printf("%+v", d.EBML)
-			// log.Printf("%+v %+v", d["EBML"], d["Segment"].(map[string]interface{})["Info"])
 		})
 	}
 }

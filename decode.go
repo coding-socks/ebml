@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"log"
 	"math"
 	"reflect"
 	"time"
@@ -99,14 +98,13 @@ func (d *Decoder) decodeRoot(val reflect.Value, def Definition) error {
 	if err != nil {
 		return err
 	}
-	if bytes.Compare(el.Definition.ID, CRC32.ID) == 0 {
+	if el.Definition.ID == CRC32.ID {
 		return errors.New("ebml: unexpected crc-32 element")
 	}
-	if bytes.Compare(el.Definition.ID, Void.ID) == 0 {
+	if el.Definition.ID == Void.ID {
 		// TODO: skip void elements
 		return errors.New("ebml: unexpected void element")
 	}
-	log.Printf("=> 0x%s", el.HexID())
 	if val.Kind() != reflect.Struct {
 		return errors.New("ebml: unknown root element type: " + val.Type().String())
 	}
@@ -120,7 +118,6 @@ func (d *Decoder) decodeRoot(val reflect.Value, def Definition) error {
 	if err := d.decodeSingle(el, found, fieldv, el.Definition.Children); err != nil {
 		return err
 	}
-	log.Printf("<= 0x%s", el.HexID())
 	return nil
 }
 
@@ -141,6 +138,25 @@ func (d *Decoder) decodeMaster(val reflect.Value, ds dataSize, defs []Definition
 		val = val.Elem()
 	}
 
+	switch v := val; v.Kind() {
+	default:
+		return errors.New("unknown master element type: " + val.Type().String())
+	case reflect.Slice:
+		// TODO: Consider checking max / min occurrence.
+		e := v.Type().Elem()
+		n := v.Len()
+		v.Set(reflect.Append(v, reflect.Zero(e)))
+		val = v.Index(n)
+	case reflect.Struct:
+		// Everything is ok
+	}
+	typ := val.Type()
+	tinfo, err := getTypeInfo(typ)
+	if err != nil {
+		return err
+	}
+
+	occurrences := make(map[string]int, len(defs))
 	start := d.r.Position()
 	for {
 		// Check size first because it can be 0
@@ -149,7 +165,7 @@ func (d *Decoder) decodeMaster(val reflect.Value, ds dataSize, defs []Definition
 			if offset > ds.Size() {
 				return errors.New("ebml: element overflow")
 			} else if offset == ds.Size() {
-				return nil
+				break
 			}
 		}
 
@@ -161,41 +177,47 @@ func (d *Decoder) decodeMaster(val reflect.Value, ds dataSize, defs []Definition
 			var e *UnknownElementError
 			if !ds.Known() && errors.As(err, &e) {
 				d.elCache = &e.el
-				return nil
+				break
 			}
 			return err
 		}
-		log.Printf("==> 0x%s", el.HexID())
-		switch v := val; v.Kind() {
-		default:
-			return errors.New("unknown master element type: " + val.Type().String())
-		case reflect.Slice:
-			// TODO: Consider checking max / min occurrence.
-			e := v.Type().Elem()
-			n := v.Len()
-			v.Set(reflect.Append(v, reflect.Zero(e)))
-			val = v.Index(n)
-		case reflect.Struct:
-			// Everything is ok
-		}
-		typ := val.Type()
-		tinfo, err := getTypeInfo(typ)
-		if err != nil {
-			return err
-		}
+		occurrences[el.ID]++
 		fieldv, found := findField(val, tinfo, el.Definition.Name)
 
 		if err := d.decodeSingle(el, found, fieldv, el.Definition.Children); err != nil {
 			return err
 		}
-		log.Printf("<== 0x%s", el.HexID())
 	}
+
+	for i := range defs {
+		def := defs[i]
+		if def.Default == nil || occurrences[def.ID] > 0 {
+			continue
+		}
+		if def.Type == TypeMaster {
+			// TODO: catch this when Doc Type is registered.
+			panic("ebml: Master Elements MUST NOT declare a default value.")
+		}
+		fieldv, found := findField(val, tinfo, def.Name)
+		if !found {
+			continue
+		}
+		if v := fieldv; v.Kind() == reflect.Slice {
+			e := v.Type().Elem()
+			if !(def.Type == TypeBinary && e.Kind() == reflect.Uint8) {
+				n := v.Len()
+				v.Set(reflect.Append(v, reflect.Zero(e)))
+				fieldv = v.Index(n)
+			}
+		}
+		fieldv.Set(reflect.ValueOf(def.Default))
+	}
+	return nil
 }
 
 func (d *Decoder) decodeSingle(el Element, found bool, val reflect.Value, defs []Definition) error {
 	if v := val; v.Kind() == reflect.Slice {
 		e := v.Type().Elem()
-		// TODO: Consider using `el.Definition.Type != TypeBinary || e.Kind() != reflect.Uint8`.
 		if !(el.Definition.Type == TypeBinary && e.Kind() == reflect.Uint8) {
 			n := v.Len()
 			v.Set(reflect.Append(v, reflect.Zero(e)))

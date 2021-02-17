@@ -4,7 +4,6 @@
 package ebml
 
 import (
-	"bytes"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -33,6 +32,7 @@ func Register(name string, docType *Definition) {
 	if docType == nil {
 		panic("ebml: Register docType is nil")
 	}
+	// TODO: Validate schema
 	if _, dup := docTypes[name]; dup {
 		panic("ebml: Register called twice for docType " + name)
 	}
@@ -82,14 +82,10 @@ func (ds *dataSize) Size() int64 {
 }
 
 type Element struct {
-	ID       []byte
+	ID       string
 	DataSize dataSize
 
 	Definition Definition
-}
-
-func (e Element) HexID() string {
-	return hex.EncodeToString(e.ID)
 }
 
 // A Decoder represents an EBML parser reading a particular input stream.
@@ -148,7 +144,7 @@ type UnknownElementError struct {
 }
 
 func (e UnknownElementError) Error() string {
-	return fmt.Sprintf("ebml: unknown element: 0x%x", e.el.ID)
+	return fmt.Sprintf("ebml: unknown element: 0x%s", e.el.ID)
 }
 
 // element returns the next EBML Element in the input stream.
@@ -172,13 +168,13 @@ func (d *Decoder) element(defs []Definition) (el Element, err error) {
 	}
 	var (
 		found bool
-		def   Definition
+		eldef Definition
 	)
 	for i := range defs {
-		definition := defs[i]
-		if bytes.Compare(definition.ID, el.ID) == 0 {
+		def := defs[i]
+		if def.ID == el.ID {
 			found = true
-			def = definition
+			eldef = def
 			break
 		}
 	}
@@ -186,13 +182,13 @@ func (d *Decoder) element(defs []Definition) (el Element, err error) {
 		switch {
 		default:
 			return Element{}, &UnknownElementError{el: el}
-		case bytes.Compare(CRC32.ID, el.ID) == 0:
-			def = CRC32
-		case bytes.Compare(Void.ID, el.ID) == 0:
-			def = Void
+		case CRC32.ID == el.ID:
+			eldef = CRC32
+		case Void.ID == el.ID:
+			eldef = Void
 		}
 	}
-	el.Definition = def
+	el.Definition = eldef
 	return el, nil
 }
 
@@ -214,25 +210,25 @@ func validateID(id *vint.Vint) error {
 var errInvalidId = fmt.Errorf("ebml: invalid length descriptor")
 
 // The octet length of an Element ID determines its EBML Class.
-func (d *Decoder) elementID() ([]byte, error) {
+func (d *Decoder) elementID() (string, error) {
 	b := make([]byte, d.maxIDLength)
 	// TODO: EBMLMaxIDLength can be greater than 8
 	//   https://tools.ietf.org/html/rfc8794#section-11.2.4
 	if _, err := d.r.Read(b[:1]); err != nil {
-		return nil, err
+		return "", err
 	}
 	w := bits.LeadingZeros8(b[0]) + 1
 	if w > len(b) {
-		return nil, errInvalidId
+		return "", errInvalidId
 	}
 	if _, err := d.r.Read(b[1:w]); err != nil {
-		return nil, err
+		return "", err
 	}
 	id := vint.NewVint(b[:w])
 	if err := validateID(id); err != nil {
-		return nil, err
+		return "", err
 	}
-	return id.Val().Bytes(), nil
+	return hex.EncodeToString(id.Val().Bytes()), nil
 }
 
 func (d *Decoder) elementDataSize() (dataSize, error) {
