@@ -1,6 +1,8 @@
 //go:generate go run make_definition.go
 
 // Package ebml implements a simple EBML parser.
+//
+// The EBML specification is RFC 8794.
 package ebml
 
 import (

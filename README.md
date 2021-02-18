@@ -3,6 +3,7 @@
 An EBML parser written in Go.
 
 - [Introduction](#introduction)
+- [Production readiness](#production-readiness)
 - [Documents](#documents)
 - [Similar libraries](#similar-libraries)
 
@@ -12,25 +13,20 @@ An EBML parser written in Go.
 
 Source: https://en.wikipedia.org/wiki/Extensible_Binary_Meta_Language
 
-This implementation is based on the July 2020 version of [RFC 8794][rfc8794]. This RFC is in a ["PROPOSED STANDARD"](https://www.rfc-editor.org/rfc/rfc2026.html#section-4.1.1) status.
+It is based on the July 2020 version of [RFC 8794][rfc8794] and on the 6th iteration of [draft-ietf-cellar-matroska][draft-ietf-cellar-matroska-06]. None of these documents reached ["Internet Standard"](https://tools.ietf.org/html/rfc2026#section-4.1.3) status yet.
 
-```
-4.1.1  Proposed Standard
+- RFC 8794 is in a ["Proposed Standard"](https://tools.ietf.org/html/rfc2026#section-4.1.1) status.
+- draft-ietf-cellar-matroska is still an [Internet-Draft](https://tools.ietf.org/html/rfc2026#section-2.2).
 
-[...]
- 
-    Implementors should treat Proposed Standards as immature  
-    specifications.  It is desirable to implement them in order to gain  
-    experience and to validate, test, and clarify the specification.  
-    However, since the content of Proposed Standards may be changed if  
-    problems are found or better solutions are identified, deploying  
-    implementations of such standards into a disruption-sensitive  
-    environment is not recommended.
- 
-[...]
-```
+The goal is to provide implementation for these documents and during the implementation provide feedback for them.
 
-Source: https://www.rfc-editor.org/rfc/rfc2026.html#section-4.1.1
+## Production readiness
+
+**This project is still in alpha phase.** In this stage the public API can change between days.
+
+Beta version will be considered when the feature set covers most of the documents the implementation is based on, and the public API is reached a mature state.
+
+Stable version will be considered only if enough positive feedback is gathered to lock the public API and all document the implementation is based on became ["Internet Standard"](https://tools.ietf.org/html/rfc2026#section-4.1.3).
 
 ## Documents
 
@@ -48,17 +44,37 @@ Huge thanks to the [Matroska.org](https://www.matroska.org/) for their work.
 ### IETF Documents
 
 - [RFC 8794: Extensible Binary Meta Language][rfc8794]
-- [draft-ietf-cellar-matroska-06: Matroska Media Container Format Specifications](https://www.ietf.org/archive/id/draft-ietf-cellar-matroska-06.html)
+- [draft-ietf-cellar-matroska-06: Matroska Media Container Format Specifications][draft-ietf-cellar-matroska-06]
 
 Huge thanks to the [IETF CELLAR Working Group](https://datatracker.ietf.org/wg/cellar/charter/) for their work.
 
+## Inspiration
+
+Inspiration for the implementation comes from the following places:
+
+- https://pkg.go.dev/database/sql#Drivers
+- https://pkg.go.dev/database/sql#Register
+- https://pkg.go.dev/encoding/json#Decoder
+- https://pkg.go.dev/golang.org/x/image/vp8#Decoder
+
 ## Similar libraries
 
-- https://github.com/at-wat/ebml-go
-- https://github.com/pankrator/ebml-parser
-- https://github.com/remko/go-mkvparse
-- https://github.com/pixelbender/go-matroska
-- https://github.com/quadrifoglio/go-mkv
-- https://github.com/ebml-go/webm
+Last updated: 2020-02-18
+
+| Syntax      | Status      |
+| ----------- | ----------- |
+| https://github.com/at-wat/ebml-go | In active development |
+| https://github.com/ebml-go/ebml + https://github.com/ebml-go/webm | Last updated on 25 Sep 2016 |
+| https://github.com/ehmry/go-ebml | Archived |
+| https://github.com/jacereda/ebml | Last updated on 10 Jan 2016 |
+| https://github.com/mediocregopher/ebmlstream | Last updated on 15 Dec 2014 |
+| https://github.com/pankrator/ebml-parser | Last updated on 24 Jun 2020 |
+| https://github.com/pixelbender/go-matroska | Last updated on 29 Oct 2018 |
+| https://github.com/pubblic/ebml | Last updated on 12 Dec 2018 |
+| https://github.com/quadrifoglio/go-mkv | Last updated on 20 Jun 2018 |
+| https://github.com/rrerolle/ebml-go | Last updated on 1 Dec 2012 |
+| https://github.com/remko/go-mkvparse | Last updated on 14 Jun 2020 |
+| https://github.com/tpjg/ebml-go | Last updated on 1 Dec 2012 |
 
 [rfc8794]: https://tools.ietf.org/html/rfc8794
+[draft-ietf-cellar-matroska-06]: https://www.ietf.org/archive/id/draft-ietf-cellar-matroska-06.html
