@@ -4,7 +4,10 @@
 // https://tools.ietf.org/html/rfc8794#section-4
 package vint
 
-import "math/big"
+import (
+	"math/big"
+	"math/bits"
+)
 
 // A form value describes the internal representation.
 type form byte
@@ -13,13 +16,6 @@ const (
 	finite form = iota
 	inf
 )
-
-var Inf = &Vint{
-	f: inf,
-	i: big.NewInt(0),
-	w: 0,
-	d: big.NewInt(0),
-}
 
 type Vint struct {
 	f form
@@ -51,6 +47,22 @@ func (v Vint) Data() *big.Int {
 	return v.d
 }
 
-func (v Vint) IsInf() bool {
-	return v.f == inf
+func AllOne(b []byte, w int) bool {
+	var oc int
+	for _, bb := range b {
+		oc += bits.OnesCount8(bb)
+	}
+	return oc == (w*8 - w)
+}
+
+func ShorterAvailable(b []byte, w int) bool {
+	tz := (w * 8) - (len(b) * 8)
+	for _, bb := range b {
+		x := bits.LeadingZeros8(bb)
+		tz += x
+		if x < 8 {
+			break
+		}
+	}
+	return (tz - w) >= 8
 }

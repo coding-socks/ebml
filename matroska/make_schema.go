@@ -60,7 +60,6 @@ func gen(w io.Writer) {
 		}()
 		for _, el := range s.Element {
 			if el.Path == `\(-\)Void` || el.Path == `\(1-\)CRC-32` {
-				// TODO: Implement support for Void and CRC-32 tags
 				continue
 			}
 			//if strings.HasPrefix(el.Path, `\EBML`) {

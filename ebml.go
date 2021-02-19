@@ -1,4 +1,4 @@
-//go:generate go run make_definition.go
+//go:generate go run make_doctype.go
 
 // Package ebml implements a simple EBML parser.
 //
@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"math/bits"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -91,6 +92,8 @@ type Element struct {
 }
 
 // A Decoder represents an EBML parser reading a particular input stream.
+// Decoding one document consists of calling DecodeHeader and then DecodeBody
+// in that order.
 type Decoder struct {
 	// https://tools.ietf.org/html/rfc8794#section-11.2.4
 	maxIDLength uint
@@ -103,6 +106,16 @@ type Decoder struct {
 
 	headerDefinition Definition
 	bodyDefinition   Definition
+}
+
+// NewDecoder creates a new EBML parser reading from r.
+func NewDecoder(r io.Reader) *Decoder {
+	d := &Decoder{
+		maxIDLength:   4,
+		maxSizeLength: 8,
+	}
+	d.switchToReader(r)
+	return d
 }
 
 type Reader struct {
@@ -118,18 +131,6 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 	n, err = r.r.Read(p)
 	r.pos += int64(n)
 	return n, err
-}
-
-// NewDecoder creates a new EBML parser reading from r.
-func NewDecoder(r io.Reader) *Decoder {
-	d := &Decoder{
-		maxIDLength:   4,
-		maxSizeLength: 8,
-
-		headerDefinition: headerDefinition,
-	}
-	d.switchToReader(r)
-	return d
 }
 
 func (d *Decoder) switchToReader(r io.Reader) {
@@ -200,10 +201,10 @@ func validateID(id *vint.Vint) error {
 	if len(b) == 0 {
 		return errors.New("VINT_DATA MUST NOT be set to all 0")
 	}
-	if allOneVint(b, id.Width()) {
+	if vint.AllOne(b, id.Width()) {
 		return errors.New("VINT_DATA MUST NOT be set to all 1")
 	}
-	if shorterAvailableVint(b, id.Width()) {
+	if vint.ShorterAvailable(b, id.Width()) {
 		return errors.New("a shorter VINT_DATA encoding is available")
 	}
 	return nil
@@ -250,8 +251,25 @@ func (d *Decoder) elementDataSize() (dataSize, error) {
 			continue
 		}
 	}
-	if allOneVint(ds.Data().Bytes(), ds.Width()) {
+	if vint.AllOne(ds.Data().Bytes(), ds.Width()) {
 		return dataSize{m: unknownDS}, nil
 	}
 	return dataSize{s: ds.Data().Int64()}, nil
+}
+
+type Definition struct {
+	ID       string
+	Type     string
+	Name     string
+	Default  interface{}
+	Children []Definition
+}
+
+func NewDefinition(id string, t, name string, def interface{}, children []Definition) Definition {
+	id = strings.TrimPrefix(id, "0x")
+	_, err := hex.DecodeString(id)
+	if err != nil {
+		panic(err)
+	}
+	return Definition{ID: strings.ToLower(id), Type: t, Name: name, Default: def, Children: children}
 }

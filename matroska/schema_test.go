@@ -68,11 +68,17 @@ func TestDecode(t *testing.T) {
 				}
 			}
 			defer f.Close()
-			var d Document
-			if err = ebml.NewDecoder(f).Decode(&d); err != nil {
+			d := ebml.NewDecoder(f)
+			var h ebml.EBML
+			if h, err = d.DecodeHeader(); err != nil {
+				t.Fatal(err)
+			}
+			log.Printf("%+v", h)
+			var b Segment
+			if err = d.DecodeBody(h, &b); err != nil {
 				t.Error(err)
 			}
-			log.Printf("%+v", d.EBML)
+			log.Printf("%+v", b.Info)
 		})
 	}
 }

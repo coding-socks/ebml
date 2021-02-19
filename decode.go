@@ -1,7 +1,6 @@
 package ebml
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -9,10 +8,6 @@ import (
 	"reflect"
 	"time"
 )
-
-func Unmarshal(data []byte, v interface{}) error {
-	return NewDecoder(bytes.NewReader(data)).Decode(v)
-}
 
 // An InvalidUnmarshalError describes an invalid argument passed to Unmarshal.
 // (The argument to Unmarshal must be a non-nil pointer.)
@@ -31,22 +26,29 @@ func (e *InvalidUnmarshalError) Error() string {
 	return "ebml: Unmarshal(nil " + e.Type.String() + ")"
 }
 
-// Decode works like Unmarshal, except it reads the decoder
-// stream.
-func (d *Decoder) Decode(v interface{}) error {
+// DecodeHeader decodes the document header.
+func (d *Decoder) DecodeHeader() (EBML, error) {
+	var v EBML
+	val := reflect.ValueOf(&v)
+
+	if err := d.decodeRoot(val.Elem(), HeaderDocType); err != nil {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+		return EBML{}, err
+	}
+	return v, nil
+}
+
+// DecodeBody decodes the EBML Body and stores the result in the value
+// pointed to by v. If v is nil or not a pointer, DecodeBody returns
+// an InvalidUnmarshalError.
+func (d *Decoder) DecodeBody(header EBML, v interface{}) error {
 	val := reflect.ValueOf(v)
 	if val.Kind() != reflect.Ptr || val.IsNil() {
 		return &InvalidUnmarshalError{reflect.TypeOf(v)}
 	}
-
-	if err := d.decodeRoot(val.Elem(), headerDefinition); err != nil {
-		if err == io.EOF {
-			err = io.ErrUnexpectedEOF
-		}
-		return err
-	}
-	// TODO: read doctype from header
-	bodyDef, err := getDefinition("matroska")
+	bodyDef, err := getDefinition(header.DocType)
 	if err != nil {
 		return err
 	}
@@ -56,7 +58,6 @@ func (d *Decoder) Decode(v interface{}) error {
 		}
 		return err
 	}
-	// TODO: decode body / segment
 	return nil
 }
 
@@ -94,6 +95,7 @@ func (d *Decoder) decodeRoot(val reflect.Value, def Definition) error {
 		}
 		val = val.Elem()
 	}
+
 	el, err := d.element([]Definition{def})
 	if err != nil {
 		return err
@@ -108,14 +110,8 @@ func (d *Decoder) decodeRoot(val reflect.Value, def Definition) error {
 	if val.Kind() != reflect.Struct {
 		return errors.New("ebml: unknown root element type: " + val.Type().String())
 	}
-	typ := val.Type()
-	tinfo, err := getTypeInfo(typ)
-	if err != nil {
-		return err
-	}
-	fieldv, found := findField(val, tinfo, el.Definition.Name)
 
-	if err := d.decodeSingle(el, found, fieldv, el.Definition.Children); err != nil {
+	if err := d.decodeSingle(el, true, val, el.Definition.Children); err != nil {
 		return err
 	}
 	return nil
