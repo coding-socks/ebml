@@ -1,6 +1,6 @@
 // +build codegen
 
-// This program generates schema.go.
+// This program generates doctype.go.
 
 package main
 
