@@ -1,7 +1,6 @@
 package ebml
 
 import (
-	"errors"
 	"reflect"
 )
 
@@ -47,9 +46,7 @@ func getTypeInfo(typ reflect.Type) (*typeInfo, error) {
 					}
 					for _, finfo := range inner.fields {
 						finfo.idx = append([]int{i}, finfo.idx...)
-						if err := addFieldInfo(typ, tinfo, &finfo); err != nil {
-							return nil, err
-						}
+						tinfo.fields = append(tinfo.fields, finfo)
 					}
 					continue
 				}
@@ -61,9 +58,7 @@ func getTypeInfo(typ reflect.Type) (*typeInfo, error) {
 			}
 
 			// Add the field if it doesn't conflict with other fields.
-			if err := addFieldInfo(typ, tinfo, finfo); err != nil {
-				return nil, err
-			}
+			tinfo.fields = append(tinfo.fields, *finfo)
 		}
 	}
 	return tinfo, nil
@@ -75,7 +70,6 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 
 	tag := f.Tag.Get("ebml")
 
-	// TODO: Parse nested structure. Not allowed for now.
 	name := tag
 	if name == "" {
 		name = f.Name
@@ -83,29 +77,6 @@ func structFieldInfo(typ reflect.Type, f *reflect.StructField) (*fieldInfo, erro
 	finfo.name = name
 
 	return finfo, nil
-}
-
-// addFieldInfo adds finfo to tinfo.fields if there are no
-// conflicts, or if conflicts arise from previous fields that were
-// obtained from deeper embedded structures than finfo. In the latter
-// case, the conflicting entries are dropped.
-// A conflict occurs when the path (parent + name) to a field is
-// itself a prefix of another path, or when two paths match exactly.
-// It is okay for field paths to share a common, shorter prefix.
-func addFieldInfo(typ reflect.Type, tinfo *typeInfo, newf *fieldInfo) error {
-	var conflicts []int
-	// TODO: figure all conflicts
-
-	// Without conflicts, add the new field and return.
-	if conflicts == nil {
-		tinfo.fields = append(tinfo.fields, *newf)
-		return nil
-	}
-
-	// TODO: handle conflicts
-
-	// TODO: implement addFieldInfo
-	return errors.New("ebml: conflict handling is not implemented")
 }
 
 var (

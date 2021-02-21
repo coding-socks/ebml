@@ -9,13 +9,37 @@ import (
 	"time"
 )
 
-// An InvalidUnmarshalError describes an invalid argument passed to Unmarshal.
+// An DecodeTypeError describes an EBML value that was
+// not appropriate for a value of a specific Go type.
+type DecodeTypeError struct {
+	EBMLType string       // description of EBML type - "integer", "binary", "master"
+	Type     reflect.Type // type of Go value it could not be assigned to
+	Offset   int64        // error occurred after reading Offset bytes
+	Path     string       // the full path from root node to the field
+}
+
+func (e *DecodeTypeError) Error() string {
+	if e.Path != "" {
+		return "ebml: cannot unmarshal " + e.EBMLType + " into Go struct field " + e.Path + " of type " + e.Type.String()
+	}
+	return "ebml: cannot unmarshal " + e.EBMLType + " into Go value of type " + e.Type.String()
+}
+
+func (e *DecodeTypeError) extendError(p string) {
+	if e.Path == "" {
+		e.Path = p
+		return
+	}
+	e.Path = p + "." + e.Path
+}
+
+// An InvalidDecodeError describes an invalid argument passed to Unmarshal.
 // (The argument to Unmarshal must be a non-nil pointer.)
-type InvalidUnmarshalError struct {
+type InvalidDecodeError struct {
 	Type reflect.Type
 }
 
-func (e *InvalidUnmarshalError) Error() string {
+func (e *InvalidDecodeError) Error() string {
 	if e.Type == nil {
 		return "ebml: Unmarshal(nil)"
 	}
@@ -42,11 +66,11 @@ func (d *Decoder) DecodeHeader() (EBML, error) {
 
 // DecodeBody decodes the EBML Body and stores the result in the value
 // pointed to by v. If v is nil or not a pointer, DecodeBody returns
-// an InvalidUnmarshalError.
+// an InvalidDecodeError.
 func (d *Decoder) DecodeBody(header EBML, v interface{}) error {
 	val := reflect.ValueOf(v)
 	if val.Kind() != reflect.Ptr || val.IsNil() {
-		return &InvalidUnmarshalError{reflect.TypeOf(v)}
+		return &InvalidDecodeError{reflect.TypeOf(v)}
 	}
 	bodyDef, err := getDefinition(header.DocType)
 	if err != nil {
@@ -181,6 +205,9 @@ func (d *Decoder) decodeMaster(val reflect.Value, ds dataSize, defs []Definition
 		fieldv, found := findField(val, tinfo, el.Definition.Name)
 
 		if err := d.decodeSingle(el, found, fieldv, el.Definition.Children); err != nil {
+			if e, ok := err.(*DecodeTypeError); ok {
+				e.extendError(val.Type().Name())
+			}
 			return err
 		}
 	}
@@ -206,7 +233,79 @@ func (d *Decoder) decodeMaster(val reflect.Value, ds dataSize, defs []Definition
 				fieldv = v.Index(n)
 			}
 		}
+
+		if err := validateReflectType(fieldv, def, d.r.Position()); err != nil {
+			if e, ok := err.(*DecodeTypeError); ok {
+				e.extendError(def.Name)
+				e.extendError(val.Type().Name())
+			}
+			return err
+		}
 		fieldv.Set(reflect.ValueOf(def.Default))
+	}
+	return nil
+}
+
+func validateReflectType(v reflect.Value, def Definition, position int64) error {
+	switch def.Type {
+	default:
+		return &DecodeTypeError{EBMLType: def.Type, Type: v.Type(), Offset: position}
+
+	case TypeMaster:
+		switch v.Kind() {
+		default:
+			return &DecodeTypeError{EBMLType: def.Type, Type: v.Type(), Offset: position}
+		case reflect.Struct:
+			// valid type
+		}
+
+	case TypeBinary:
+		switch v.Kind() {
+		default:
+			return &DecodeTypeError{EBMLType: def.Type, Type: v.Type(), Offset: position}
+		case reflect.Slice:
+			e := v.Type().Elem()
+			if e.Kind() != reflect.Uint8 {
+				return &DecodeTypeError{EBMLType: def.Type, Type: v.Type(), Offset: position}
+			}
+		}
+
+	case TypeDate:
+		switch v.Type() {
+		default:
+			return &DecodeTypeError{EBMLType: def.Type, Type: v.Type(), Offset: position}
+		case timeType:
+			// valid type
+		}
+
+	case TypeFloat:
+		switch v.Kind() {
+		default:
+			return &DecodeTypeError{EBMLType: def.Type, Type: v.Type(), Offset: position}
+		case reflect.Float32, reflect.Float64:
+			// valid type
+		}
+
+	case TypeInteger:
+		switch v.Kind() {
+		default:
+			return &DecodeTypeError{EBMLType: def.Type, Type: v.Type(), Offset: position}
+		case reflect.Int, reflect.Int64, reflect.Int32:
+			// valid type
+		}
+
+	case TypeUinteger:
+		switch v.Kind() {
+		default:
+			return &DecodeTypeError{EBMLType: def.Type, Type: v.Type(), Offset: position}
+		case reflect.Uint, reflect.Uint64, reflect.Uint32:
+			// valid type
+		}
+
+	case TypeString, TypeUTF8:
+		if v.Kind() != reflect.String {
+			return &DecodeTypeError{EBMLType: def.Type, Type: v.Type(), Offset: position}
+		}
 	}
 	return nil
 }
@@ -220,10 +319,16 @@ func (d *Decoder) decodeSingle(el Element, found bool, val reflect.Value, defs [
 			val = v.Index(n)
 		}
 	}
-	switch el.Definition.Type {
-	default:
-		return errors.New("ebml: unknown type: " + el.Definition.Type)
+	if found {
+		if err := validateReflectType(val, el.Definition, d.r.Position()); err != nil {
+			if e, ok := err.(*DecodeTypeError); ok {
+				e.extendError(el.Definition.Name)
+			}
+			return err
+		}
+	}
 
+	switch el.Definition.Type {
 	case TypeMaster:
 		if err := d.decodeMaster(val, el.DataSize, defs); err != nil {
 			return err
