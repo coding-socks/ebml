@@ -234,9 +234,7 @@ func (d *Decoder) elementID() (string, error) {
 
 func dataPad(b []byte) []byte {
 	db := make([]byte, 8)
-	for i, j := 8-len(b), 0; i < 8; i, j = i+1, j+1 {
-		db[i] = b[j]
-	}
+	copy(db[8-len(b):], b)
 	return db
 }
 
