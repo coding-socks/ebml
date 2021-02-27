@@ -6,13 +6,12 @@
 package ebml
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/coding-socks/ebml/vint"
 	"io"
 	"io/ioutil"
-	"math/bits"
 	"sort"
 	"strings"
 	"sync"
@@ -196,15 +195,14 @@ func (d *Decoder) element(defs []Definition) (el Element, err error) {
 }
 
 // https://tools.ietf.org/html/rfc8794#section-5
-func validateID(id *vint.Vint) error {
-	b := id.Data().Bytes()
-	if len(b) == 0 {
+func validateIDData(data []byte, w int) error {
+	if vintDataAllZero(data, w) {
 		return errors.New("VINT_DATA MUST NOT be set to all 0")
 	}
-	if vint.AllOne(b, id.Width()) {
+	if vintDataAllOne(data, w) {
 		return errors.New("VINT_DATA MUST NOT be set to all 1")
 	}
-	if vint.ShorterAvailable(b, id.Width()) {
+	if vintDataAvailableShorter(data, w) {
 		return errors.New("a shorter VINT_DATA encoding is available")
 	}
 	return nil
@@ -220,18 +218,26 @@ func (d *Decoder) elementID() (string, error) {
 	if _, err := d.r.Read(b[:1]); err != nil {
 		return "", err
 	}
-	w := bits.LeadingZeros8(b[0]) + 1
+	w := vintOctetLength(b)
 	if w > len(b) {
 		return "", errInvalidId
 	}
 	if _, err := d.r.Read(b[1:w]); err != nil {
 		return "", err
 	}
-	id := vint.NewVint(b[:w])
-	if err := validateID(id); err != nil {
+	data := vintData(b, w)
+	if err := validateIDData(data, w); err != nil {
 		return "", err
 	}
-	return hex.EncodeToString(id.Val().Bytes()), nil
+	return hex.EncodeToString(b[:w]), nil
+}
+
+func dataPad(b []byte) []byte {
+	db := make([]byte, 8)
+	for i, j := 8-len(b), 0; i < 8; i, j = i+1, j+1 {
+		db[i] = b[j]
+	}
+	return db
 }
 
 func (d *Decoder) elementDataSize() (dataSize, error) {
@@ -241,20 +247,16 @@ func (d *Decoder) elementDataSize() (dataSize, error) {
 	if _, err := d.r.Read(b[:1]); err != nil {
 		return dataSize{}, err
 	}
-	w := bits.LeadingZeros8(b[0]) + 1
+	w := vintOctetLength(b)
 	if _, err := d.r.Read(b[1:w]); err != nil {
 		return dataSize{}, err
 	}
-	ds := vint.NewVint(b[:w])
-	for _, b := range b[1:w] {
-		if b == 255 {
-			continue
-		}
-	}
-	if vint.AllOne(ds.Data().Bytes(), ds.Width()) {
+	ds := vintData(b, w)
+	if vintDataAllOne(ds, w) {
 		return dataSize{m: unknownDS}, nil
 	}
-	return dataSize{s: ds.Data().Int64()}, nil
+	i := binary.BigEndian.Uint64(dataPad(ds))
+	return dataSize{s: int64(i)}, nil
 }
 
 type Definition struct {
