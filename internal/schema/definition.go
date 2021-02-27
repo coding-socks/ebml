@@ -9,6 +9,7 @@ package schema
 import (
 	"encoding/xml"
 	"reflect"
+	"strconv"
 )
 
 var (
@@ -71,20 +72,46 @@ type Element struct {
 	Restriction        *Restriction    `xml:"restriction"`
 	Extension          []Extension     `xml:"extension"`
 
-	Name               string `xml:"name,attr"`
-	Path               string `xml:"path,attr"`
-	ID                 string `xml:"id,attr"`
-	MinOccurs          int    `xml:"minOccurs,attr"`
-	MaxOccurs          int    `xml:"maxOccurs,attr"`
-	Range              string `xml:"range,attr"`
-	Length             string `xml:"length,attr"`
-	Default            string `xml:"default,attr"`
-	Type               string `xml:"type,attr"`
-	UnknownSizeAllowed bool   `xml:"unknownsizeallowed,attr"`
-	Recursive          bool   `xml:"recursive,attr"`
-	Recurring          bool   `xml:"recurring,attr"`
-	MinVer             int    `xml:"minver,attr"`
-	MaxVer             int    `xml:"maxver,attr"`
+	Name               string       `xml:"name,attr"`
+	Path               string       `xml:"path,attr"`
+	ID                 string       `xml:"id,attr"`
+	MinOccurs          int          `xml:"minOccurs,attr"`
+	MaxOccurs          UnboundedInt `xml:"maxOccurs,attr"`
+	Range              string       `xml:"range,attr"`
+	Length             string       `xml:"length,attr"`
+	Default            string       `xml:"default,attr"`
+	Type               string       `xml:"type,attr"`
+	UnknownSizeAllowed bool         `xml:"unknownsizeallowed,attr"`
+	Recursive          bool         `xml:"recursive,attr"`
+	Recurring          bool         `xml:"recurring,attr"`
+	MinVer             int          `xml:"minver,attr"`
+	MaxVer             int          `xml:"maxver,attr"`
+}
+
+type UnboundedInt struct {
+	unbounded bool
+	val       int
+}
+
+func (u UnboundedInt) Unbounded() bool {
+	return u.unbounded
+}
+
+func (u UnboundedInt) Val() int {
+	return u.val
+}
+
+func (u *UnboundedInt) UnmarshalXMLAttr(attr xml.Attr) error {
+	if attr.Value == "unbounded" {
+		*u = UnboundedInt{unbounded: true}
+		return nil
+	}
+	i, err := strconv.ParseInt(attr.Value, 10, 64)
+	if err != nil {
+		return err
+	}
+	*u = UnboundedInt{val: int(i)}
+	return nil
 }
 
 func (s *Element) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
@@ -95,11 +122,11 @@ func (s *Element) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 		// [...] If the maxOccurs attribute is not present, then there is no
 		// upper bound for the permitted number of occurrences [...]
 		// https://www.rfc-editor.org/rfc/rfc8794#name-maxoccurs
-		MaxOccurs:          0,     // default="unbounded"
-		UnknownSizeAllowed: false, // default="false"
-		Recursive:          false, // default="false"
-		Recurring:          false, // default="false"
-		MinVer:             1,     // default="1"
+		MaxOccurs:          UnboundedInt{unbounded: true}, // default="unbounded"
+		UnknownSizeAllowed: false,                         // default="false"
+		Recursive:          false,                         // default="false"
+		Recurring:          false,                         // default="false"
+		MinVer:             1,                             // default="1"
 	}
 	if err := d.DecodeElement(&item, &start); err != nil {
 		return err
