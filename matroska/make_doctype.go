@@ -95,7 +95,7 @@ func write(w io.Writer, node *schema.TreeNode) {
 	}
 	fmt.Fprintf(w, "type %s struct {", node.El.Name)
 	node.VisitAll(func(n *schema.TreeNode) {
-		if n.El.MaxOccurs != 1 {
+		if n.El.MaxOccurs.Unbounded() || n.El.MaxOccurs.Val() > 1 {
 			fmt.Fprintf(w, "\n\t%s []%s", n.El.Name, schema.ResolveGoType(n.El.Type, n.El.Name))
 			return
 		}
