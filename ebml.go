@@ -196,14 +196,8 @@ func (d *Decoder) element(defs []Definition) (el Element, err error) {
 
 // https://tools.ietf.org/html/rfc8794#section-5
 func validateIDData(data []byte, w int) error {
-	if vintDataAllZero(data, w) {
-		return errors.New("VINT_DATA MUST NOT be set to all 0")
-	}
 	if vintDataAllOne(data, w) {
 		return errors.New("VINT_DATA MUST NOT be set to all 1")
-	}
-	if vintDataAvailableShorter(data, w) {
-		return errors.New("a shorter VINT_DATA encoding is available")
 	}
 	return nil
 }

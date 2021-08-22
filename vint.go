@@ -50,16 +50,3 @@ func vintDataAllOne(b []byte, w int) bool {
 	}
 	return oc == (w*8 - w)
 }
-
-func vintDataAvailableShorter(b []byte, w int) bool {
-	tz := (w * 8) - (len(b) * 8)
-	for i := 0; i < w; i++ {
-		bb := b[i]
-		x := bits.LeadingZeros8(bb)
-		tz += x
-		if x < 8 {
-			break
-		}
-	}
-	return (tz - w) >= 8
-}

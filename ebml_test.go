@@ -14,32 +14,17 @@ func Test_validateIDData(t *testing.T) {
 		{
 			name:    "all zero",
 			id:      []byte{0b10000000},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name:    "all zero",
 			id:      []byte{0b01000000, 0b00000000},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name:    "not all zero",
 			id:      []byte{0b10000001},
 			wantErr: false,
-		},
-		{
-			name:    "shorter available",
-			id:      []byte{0b01000000, 0b00000001},
-			wantErr: true,
-		},
-		{
-			name:    "shorter not available",
-			id:      []byte{0b10111111},
-			wantErr: false,
-		},
-		{
-			name:    "shorter available",
-			id:      []byte{0b01000000, 0b00111111},
-			wantErr: true,
 		},
 		{
 			name:    "all one",
