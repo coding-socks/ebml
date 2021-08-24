@@ -8,8 +8,10 @@ package ebml
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/xml"
 	"errors"
 	"fmt"
+	"github.com/coding-socks/ebml/internal/schema"
 	"io"
 	"io/ioutil"
 	"sort"
@@ -19,29 +21,36 @@ import (
 
 var (
 	docTypesMu sync.RWMutex
-	docTypes   = make(map[string]Definition)
+	docTypes   = make(map[string]schema.Schema)
 
-	CRC32 = NewDefinition("BF", TypeBinary, "CRC-32", nil, nil)
-	Void  = NewDefinition("EC", TypeBinary, "CRC-32", nil, nil)
+	crc32Id = "0xBF"
+	voidId  = "0xEC"
+
+	HeaderDocType schema.Schema
 )
 
-// Register makes a DocType available by the provided name.
-// If Register is called twice with the same name or if driver is nil,
-// it panics.
-func Register(name string, docType *Definition) {
-	docTypesMu.Lock()
-	defer docTypesMu.Unlock()
-	if docType == nil {
-		panic("ebml: Register docType is nil")
+func init() {
+	err := xml.Unmarshal(schemaDefinition, &HeaderDocType)
+	if err != nil {
+		panic("cannot parse header definition")
 	}
-	// TODO: Validate schema
-	if _, dup := docTypes[name]; dup {
-		panic("ebml: Register called twice for docType " + name)
-	}
-	docTypes[name] = *docType
 }
 
-// Drivers returns a sorted list of the names of the registered drivers.
+// Register makes a schema.Schema available by the provided doc type.
+// If Register is called twice with the same name or if driver is nil,
+// it panics.
+func Register(docType string, s schema.Schema) {
+	docTypesMu.Lock()
+	defer docTypesMu.Unlock()
+	// TODO: Validate schema
+	if _, dup := docTypes[docType]; dup {
+		panic("ebml: register called twice for docType " + docType)
+	}
+	s.Elements = append(s.Elements, HeaderDocType.Elements...)
+	docTypes[docType] = s
+}
+
+// DocTypes returns a sorted list of the names of the registered document types.
 func DocTypes() []string {
 	docTypesMu.RLock()
 	defer docTypesMu.RUnlock()
@@ -53,12 +62,12 @@ func DocTypes() []string {
 	return list
 }
 
-func getDefinition(docType string) (Definition, error) {
+func definition(docType string) (schema.Schema, error) {
 	docTypesMu.RLock()
 	dt, ok := docTypes[docType]
 	docTypesMu.RUnlock()
 	if !ok {
-		return Definition{}, fmt.Errorf("ebml: unknown docType %q (forgotten import?)", docType)
+		return schema.Schema{}, fmt.Errorf("ebml: unknown docType %q (forgotten import?)", docType)
 	}
 	return dt, nil
 }
@@ -84,10 +93,10 @@ func (ds *dataSize) Size() int64 {
 }
 
 type Element struct {
+	def schema.Element
+
 	ID       string
 	DataSize dataSize
-
-	Definition Definition
 }
 
 // A Decoder represents an EBML parser reading a particular input stream.
@@ -102,9 +111,6 @@ type Decoder struct {
 	r *Reader
 
 	elCache *Element
-
-	headerDefinition Definition
-	bodyDefinition   Definition
 }
 
 // NewDecoder creates a new EBML parser reading from r.
@@ -146,7 +152,7 @@ type UnknownElementError struct {
 }
 
 func (e UnknownElementError) Error() string {
-	return fmt.Sprintf("ebml: unknown element: 0x%s", e.el.ID)
+	return fmt.Sprintf("ebml: unknown element: %s", e.el.ID)
 }
 
 // element returns the next EBML Element in the input stream.
@@ -154,7 +160,7 @@ func (e UnknownElementError) Error() string {
 //
 // Element implements EBML specification as described by
 // https://matroska-org.github.io/libebml/specs.html.
-func (d *Decoder) element(defs []Definition) (el Element, err error) {
+func (d *Decoder) element(elements []schema.Element) (el Element, err error) {
 	if d.elCache != nil {
 		el = *d.elCache
 		d.elCache = nil
@@ -170,27 +176,19 @@ func (d *Decoder) element(defs []Definition) (el Element, err error) {
 	}
 	var (
 		found bool
-		eldef Definition
+		eldef schema.Element
 	)
-	for i := range defs {
-		def := defs[i]
-		if def.ID == el.ID {
+	for i := range elements {
+		if elements[i].ID == el.ID {
 			found = true
-			eldef = def
+			eldef = elements[i]
 			break
 		}
 	}
 	if !found {
-		switch {
-		default:
-			return Element{}, &UnknownElementError{el: el}
-		case CRC32.ID == el.ID:
-			eldef = CRC32
-		case Void.ID == el.ID:
-			eldef = Void
-		}
+		return Element{}, &UnknownElementError{el: el}
 	}
-	el.Definition = eldef
+	el.def = eldef
 	return el, nil
 }
 
@@ -223,7 +221,7 @@ func (d *Decoder) elementID() (string, error) {
 	if err := validateIDData(data, w); err != nil {
 		return "", err
 	}
-	return hex.EncodeToString(b[:w]), nil
+	return "0x" + strings.ToUpper(hex.EncodeToString(b[:w])), nil
 }
 
 func dataPad(b []byte) []byte {
@@ -249,21 +247,4 @@ func (d *Decoder) elementDataSize() (dataSize, error) {
 	}
 	i := binary.BigEndian.Uint64(dataPad(ds))
 	return dataSize{s: int64(i)}, nil
-}
-
-type Definition struct {
-	ID       string
-	Type     string
-	Name     string
-	Default  interface{}
-	Children []Definition
-}
-
-func NewDefinition(id string, t, name string, def interface{}, children []Definition) Definition {
-	id = strings.TrimPrefix(id, "0x")
-	_, err := hex.DecodeString(id)
-	if err != nil {
-		panic(err)
-	}
-	return Definition{ID: strings.ToLower(id), Type: t, Name: name, Default: def, Children: children}
 }

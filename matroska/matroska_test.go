@@ -10,6 +10,19 @@ import (
 	"testing"
 )
 
+func Test_init(t *testing.T) {
+	found := false
+	for _, docType := range ebml.DocTypes() {
+		if docType == "matroska" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("matroska doctype not found")
+	}
+}
+
 func downloadTestFile(filename, source string) error {
 	resp, err := http.Get(source)
 	if err != nil {

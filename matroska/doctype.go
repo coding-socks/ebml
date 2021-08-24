@@ -3,307 +3,12 @@
 package matroska
 
 import (
+	_ "embed"
 	"time"
-
-	"github.com/coding-socks/ebml"
 )
 
-var DocType = ebml.NewDefinition("0x18538067", ebml.TypeMaster, "Segment", nil, []ebml.Definition{
-	ebml.NewDefinition("0x114D9B74", ebml.TypeMaster, "SeekHead", nil, []ebml.Definition{
-		ebml.NewDefinition("0x4DBB", ebml.TypeMaster, "Seek", nil, []ebml.Definition{
-			ebml.NewDefinition("0x53AB", ebml.TypeBinary, "SeekID", nil, nil),
-			ebml.NewDefinition("0x53AC", ebml.TypeUinteger, "SeekPosition", nil, nil),
-		}),
-	}),
-	ebml.NewDefinition("0x1549A966", ebml.TypeMaster, "Info", nil, []ebml.Definition{
-		ebml.NewDefinition("0x73A4", ebml.TypeBinary, "SegmentUID", nil, nil),
-		ebml.NewDefinition("0x7384", ebml.TypeUTF8, "SegmentFilename", nil, nil),
-		ebml.NewDefinition("0x3CB923", ebml.TypeBinary, "PrevUID", nil, nil),
-		ebml.NewDefinition("0x3C83AB", ebml.TypeUTF8, "PrevFilename", nil, nil),
-		ebml.NewDefinition("0x3EB923", ebml.TypeBinary, "NextUID", nil, nil),
-		ebml.NewDefinition("0x3E83BB", ebml.TypeUTF8, "NextFilename", nil, nil),
-		ebml.NewDefinition("0x4444", ebml.TypeBinary, "SegmentFamily", nil, nil),
-		ebml.NewDefinition("0x6924", ebml.TypeMaster, "ChapterTranslate", nil, []ebml.Definition{
-			ebml.NewDefinition("0x69FC", ebml.TypeUinteger, "ChapterTranslateEditionUID", nil, nil),
-			ebml.NewDefinition("0x69BF", ebml.TypeUinteger, "ChapterTranslateCodec", nil, nil),
-			ebml.NewDefinition("0x69A5", ebml.TypeBinary, "ChapterTranslateID", nil, nil),
-		}),
-		ebml.NewDefinition("0x2AD7B1", ebml.TypeUinteger, "TimestampScale", uint(1000000), nil),
-		ebml.NewDefinition("0x4489", ebml.TypeFloat, "Duration", nil, nil),
-		ebml.NewDefinition("0x4461", ebml.TypeDate, "DateUTC", nil, nil),
-		ebml.NewDefinition("0x7BA9", ebml.TypeUTF8, "Title", nil, nil),
-		ebml.NewDefinition("0x4D80", ebml.TypeUTF8, "MuxingApp", nil, nil),
-		ebml.NewDefinition("0x5741", ebml.TypeUTF8, "WritingApp", nil, nil),
-	}),
-	ebml.NewDefinition("0x1F43B675", ebml.TypeMaster, "Cluster", nil, []ebml.Definition{
-		ebml.NewDefinition("0xE7", ebml.TypeUinteger, "Timestamp", nil, nil),
-		ebml.NewDefinition("0x5854", ebml.TypeMaster, "SilentTracks", nil, []ebml.Definition{
-			ebml.NewDefinition("0x58D7", ebml.TypeUinteger, "SilentTrackNumber", nil, nil),
-		}),
-		ebml.NewDefinition("0xA7", ebml.TypeUinteger, "Position", nil, nil),
-		ebml.NewDefinition("0xAB", ebml.TypeUinteger, "PrevSize", nil, nil),
-		ebml.NewDefinition("0xA3", ebml.TypeBinary, "SimpleBlock", nil, nil),
-		ebml.NewDefinition("0xA0", ebml.TypeMaster, "BlockGroup", nil, []ebml.Definition{
-			ebml.NewDefinition("0xA1", ebml.TypeBinary, "Block", nil, nil),
-			ebml.NewDefinition("0xA2", ebml.TypeBinary, "BlockVirtual", nil, nil),
-			ebml.NewDefinition("0x75A1", ebml.TypeMaster, "BlockAdditions", nil, []ebml.Definition{
-				ebml.NewDefinition("0xA6", ebml.TypeMaster, "BlockMore", nil, []ebml.Definition{
-					ebml.NewDefinition("0xEE", ebml.TypeUinteger, "BlockAddID", uint(1), nil),
-					ebml.NewDefinition("0xA5", ebml.TypeBinary, "BlockAdditional", nil, nil),
-				}),
-			}),
-			ebml.NewDefinition("0x9B", ebml.TypeUinteger, "BlockDuration", nil, nil),
-			ebml.NewDefinition("0xFA", ebml.TypeUinteger, "ReferencePriority", uint(0), nil),
-			ebml.NewDefinition("0xFB", ebml.TypeInteger, "ReferenceBlock", nil, nil),
-			ebml.NewDefinition("0xFD", ebml.TypeInteger, "ReferenceVirtual", nil, nil),
-			ebml.NewDefinition("0xA4", ebml.TypeBinary, "CodecState", nil, nil),
-			ebml.NewDefinition("0x75A2", ebml.TypeInteger, "DiscardPadding", nil, nil),
-			ebml.NewDefinition("0x8E", ebml.TypeMaster, "Slices", nil, []ebml.Definition{
-				ebml.NewDefinition("0xE8", ebml.TypeMaster, "TimeSlice", nil, []ebml.Definition{
-					ebml.NewDefinition("0xCC", ebml.TypeUinteger, "LaceNumber", uint(0), nil),
-					ebml.NewDefinition("0xCD", ebml.TypeUinteger, "FrameNumber", uint(0), nil),
-					ebml.NewDefinition("0xCB", ebml.TypeUinteger, "BlockAdditionID", uint(0), nil),
-					ebml.NewDefinition("0xCE", ebml.TypeUinteger, "Delay", uint(0), nil),
-					ebml.NewDefinition("0xCF", ebml.TypeUinteger, "SliceDuration", uint(0), nil),
-				}),
-			}),
-			ebml.NewDefinition("0xC8", ebml.TypeMaster, "ReferenceFrame", nil, []ebml.Definition{
-				ebml.NewDefinition("0xC9", ebml.TypeUinteger, "ReferenceOffset", nil, nil),
-				ebml.NewDefinition("0xCA", ebml.TypeUinteger, "ReferenceTimestamp", nil, nil),
-			}),
-		}),
-		ebml.NewDefinition("0xAF", ebml.TypeBinary, "EncryptedBlock", nil, nil),
-	}),
-	ebml.NewDefinition("0x1654AE6B", ebml.TypeMaster, "Tracks", nil, []ebml.Definition{
-		ebml.NewDefinition("0xAE", ebml.TypeMaster, "TrackEntry", nil, []ebml.Definition{
-			ebml.NewDefinition("0xD7", ebml.TypeUinteger, "TrackNumber", nil, nil),
-			ebml.NewDefinition("0x73C5", ebml.TypeUinteger, "TrackUID", nil, nil),
-			ebml.NewDefinition("0x83", ebml.TypeUinteger, "TrackType", nil, nil),
-			ebml.NewDefinition("0xB9", ebml.TypeUinteger, "FlagEnabled", uint(1), nil),
-			ebml.NewDefinition("0x88", ebml.TypeUinteger, "FlagDefault", uint(1), nil),
-			ebml.NewDefinition("0x55AA", ebml.TypeUinteger, "FlagForced", uint(0), nil),
-			ebml.NewDefinition("0x9C", ebml.TypeUinteger, "FlagLacing", uint(1), nil),
-			ebml.NewDefinition("0x6DE7", ebml.TypeUinteger, "MinCache", uint(0), nil),
-			ebml.NewDefinition("0x6DF8", ebml.TypeUinteger, "MaxCache", nil, nil),
-			ebml.NewDefinition("0x23E383", ebml.TypeUinteger, "DefaultDuration", nil, nil),
-			ebml.NewDefinition("0x234E7A", ebml.TypeUinteger, "DefaultDecodedFieldDuration", nil, nil),
-			ebml.NewDefinition("0x23314F", ebml.TypeFloat, "TrackTimestampScale", float64(0x1p+0), nil),
-			ebml.NewDefinition("0x537F", ebml.TypeInteger, "TrackOffset", int(0), nil),
-			ebml.NewDefinition("0x55EE", ebml.TypeUinteger, "MaxBlockAdditionID", uint(0), nil),
-			ebml.NewDefinition("0x41E4", ebml.TypeMaster, "BlockAdditionMapping", nil, []ebml.Definition{
-				ebml.NewDefinition("0x41F0", ebml.TypeUinteger, "BlockAddIDValue", nil, nil),
-				ebml.NewDefinition("0x41A4", ebml.TypeString, "BlockAddIDName", nil, nil),
-				ebml.NewDefinition("0x41E7", ebml.TypeUinteger, "BlockAddIDType", uint(0), nil),
-				ebml.NewDefinition("0x41ED", ebml.TypeBinary, "BlockAddIDExtraData", nil, nil),
-			}),
-			ebml.NewDefinition("0x536E", ebml.TypeUTF8, "Name", nil, nil),
-			ebml.NewDefinition("0x22B59C", ebml.TypeString, "Language", "eng", nil),
-			ebml.NewDefinition("0x22B59D", ebml.TypeString, "LanguageIETF", nil, nil),
-			ebml.NewDefinition("0x86", ebml.TypeString, "CodecID", nil, nil),
-			ebml.NewDefinition("0x63A2", ebml.TypeBinary, "CodecPrivate", nil, nil),
-			ebml.NewDefinition("0x258688", ebml.TypeUTF8, "CodecName", nil, nil),
-			ebml.NewDefinition("0x7446", ebml.TypeUinteger, "AttachmentLink", nil, nil),
-			ebml.NewDefinition("0x3A9697", ebml.TypeUTF8, "CodecSettings", nil, nil),
-			ebml.NewDefinition("0x3B4040", ebml.TypeString, "CodecInfoURL", nil, nil),
-			ebml.NewDefinition("0x26B240", ebml.TypeString, "CodecDownloadURL", nil, nil),
-			ebml.NewDefinition("0xAA", ebml.TypeUinteger, "CodecDecodeAll", uint(1), nil),
-			ebml.NewDefinition("0x6FAB", ebml.TypeUinteger, "TrackOverlay", nil, nil),
-			ebml.NewDefinition("0x56AA", ebml.TypeUinteger, "CodecDelay", uint(0), nil),
-			ebml.NewDefinition("0x56BB", ebml.TypeUinteger, "SeekPreRoll", uint(0), nil),
-			ebml.NewDefinition("0x6624", ebml.TypeMaster, "TrackTranslate", nil, []ebml.Definition{
-				ebml.NewDefinition("0x66FC", ebml.TypeUinteger, "TrackTranslateEditionUID", nil, nil),
-				ebml.NewDefinition("0x66BF", ebml.TypeUinteger, "TrackTranslateCodec", nil, nil),
-				ebml.NewDefinition("0x66A5", ebml.TypeBinary, "TrackTranslateTrackID", nil, nil),
-			}),
-			ebml.NewDefinition("0xE0", ebml.TypeMaster, "Video", nil, []ebml.Definition{
-				ebml.NewDefinition("0x9A", ebml.TypeUinteger, "FlagInterlaced", uint(0), nil),
-				ebml.NewDefinition("0x9D", ebml.TypeUinteger, "FieldOrder", uint(2), nil),
-				ebml.NewDefinition("0x53B8", ebml.TypeUinteger, "StereoMode", uint(0), nil),
-				ebml.NewDefinition("0x53C0", ebml.TypeUinteger, "AlphaMode", uint(0), nil),
-				ebml.NewDefinition("0x53B9", ebml.TypeUinteger, "OldStereoMode", nil, nil),
-				ebml.NewDefinition("0xB0", ebml.TypeUinteger, "PixelWidth", nil, nil),
-				ebml.NewDefinition("0xBA", ebml.TypeUinteger, "PixelHeight", nil, nil),
-				ebml.NewDefinition("0x54AA", ebml.TypeUinteger, "PixelCropBottom", uint(0), nil),
-				ebml.NewDefinition("0x54BB", ebml.TypeUinteger, "PixelCropTop", uint(0), nil),
-				ebml.NewDefinition("0x54CC", ebml.TypeUinteger, "PixelCropLeft", uint(0), nil),
-				ebml.NewDefinition("0x54DD", ebml.TypeUinteger, "PixelCropRight", uint(0), nil),
-				ebml.NewDefinition("0x54B0", ebml.TypeUinteger, "DisplayWidth", nil, nil),
-				ebml.NewDefinition("0x54BA", ebml.TypeUinteger, "DisplayHeight", nil, nil),
-				ebml.NewDefinition("0x54B2", ebml.TypeUinteger, "DisplayUnit", uint(0), nil),
-				ebml.NewDefinition("0x54B3", ebml.TypeUinteger, "AspectRatioType", uint(0), nil),
-				ebml.NewDefinition("0x2EB524", ebml.TypeBinary, "ColourSpace", nil, nil),
-				ebml.NewDefinition("0x2FB523", ebml.TypeFloat, "GammaValue", nil, nil),
-				ebml.NewDefinition("0x2383E3", ebml.TypeFloat, "FrameRate", nil, nil),
-				ebml.NewDefinition("0x55B0", ebml.TypeMaster, "Colour", nil, []ebml.Definition{
-					ebml.NewDefinition("0x55B1", ebml.TypeUinteger, "MatrixCoefficients", uint(2), nil),
-					ebml.NewDefinition("0x55B2", ebml.TypeUinteger, "BitsPerChannel", uint(0), nil),
-					ebml.NewDefinition("0x55B3", ebml.TypeUinteger, "ChromaSubsamplingHorz", nil, nil),
-					ebml.NewDefinition("0x55B4", ebml.TypeUinteger, "ChromaSubsamplingVert", nil, nil),
-					ebml.NewDefinition("0x55B5", ebml.TypeUinteger, "CbSubsamplingHorz", nil, nil),
-					ebml.NewDefinition("0x55B6", ebml.TypeUinteger, "CbSubsamplingVert", nil, nil),
-					ebml.NewDefinition("0x55B7", ebml.TypeUinteger, "ChromaSitingHorz", uint(0), nil),
-					ebml.NewDefinition("0x55B8", ebml.TypeUinteger, "ChromaSitingVert", uint(0), nil),
-					ebml.NewDefinition("0x55B9", ebml.TypeUinteger, "Range", uint(0), nil),
-					ebml.NewDefinition("0x55BA", ebml.TypeUinteger, "TransferCharacteristics", uint(2), nil),
-					ebml.NewDefinition("0x55BB", ebml.TypeUinteger, "Primaries", uint(2), nil),
-					ebml.NewDefinition("0x55BC", ebml.TypeUinteger, "MaxCLL", nil, nil),
-					ebml.NewDefinition("0x55BD", ebml.TypeUinteger, "MaxFALL", nil, nil),
-					ebml.NewDefinition("0x55D0", ebml.TypeMaster, "MasteringMetadata", nil, []ebml.Definition{
-						ebml.NewDefinition("0x55D1", ebml.TypeFloat, "PrimaryRChromaticityX", nil, nil),
-						ebml.NewDefinition("0x55D2", ebml.TypeFloat, "PrimaryRChromaticityY", nil, nil),
-						ebml.NewDefinition("0x55D3", ebml.TypeFloat, "PrimaryGChromaticityX", nil, nil),
-						ebml.NewDefinition("0x55D4", ebml.TypeFloat, "PrimaryGChromaticityY", nil, nil),
-						ebml.NewDefinition("0x55D5", ebml.TypeFloat, "PrimaryBChromaticityX", nil, nil),
-						ebml.NewDefinition("0x55D6", ebml.TypeFloat, "PrimaryBChromaticityY", nil, nil),
-						ebml.NewDefinition("0x55D7", ebml.TypeFloat, "WhitePointChromaticityX", nil, nil),
-						ebml.NewDefinition("0x55D8", ebml.TypeFloat, "WhitePointChromaticityY", nil, nil),
-						ebml.NewDefinition("0x55D9", ebml.TypeFloat, "LuminanceMax", nil, nil),
-						ebml.NewDefinition("0x55DA", ebml.TypeFloat, "LuminanceMin", nil, nil),
-					}),
-				}),
-				ebml.NewDefinition("0x7670", ebml.TypeMaster, "Projection", nil, []ebml.Definition{
-					ebml.NewDefinition("0x7671", ebml.TypeUinteger, "ProjectionType", uint(0), nil),
-					ebml.NewDefinition("0x7672", ebml.TypeBinary, "ProjectionPrivate", nil, nil),
-					ebml.NewDefinition("0x7673", ebml.TypeFloat, "ProjectionPoseYaw", float64(0x0p+0), nil),
-					ebml.NewDefinition("0x7674", ebml.TypeFloat, "ProjectionPosePitch", float64(0x0p+0), nil),
-					ebml.NewDefinition("0x7675", ebml.TypeFloat, "ProjectionPoseRoll", float64(0x0p+0), nil),
-				}),
-			}),
-			ebml.NewDefinition("0xE1", ebml.TypeMaster, "Audio", nil, []ebml.Definition{
-				ebml.NewDefinition("0xB5", ebml.TypeFloat, "SamplingFrequency", float64(0x1.f4p+12), nil),
-				ebml.NewDefinition("0x78B5", ebml.TypeFloat, "OutputSamplingFrequency", nil, nil),
-				ebml.NewDefinition("0x9F", ebml.TypeUinteger, "Channels", uint(1), nil),
-				ebml.NewDefinition("0x7D7B", ebml.TypeBinary, "ChannelPositions", nil, nil),
-				ebml.NewDefinition("0x6264", ebml.TypeUinteger, "BitDepth", nil, nil),
-			}),
-			ebml.NewDefinition("0xE2", ebml.TypeMaster, "TrackOperation", nil, []ebml.Definition{
-				ebml.NewDefinition("0xE3", ebml.TypeMaster, "TrackCombinePlanes", nil, []ebml.Definition{
-					ebml.NewDefinition("0xE4", ebml.TypeMaster, "TrackPlane", nil, []ebml.Definition{
-						ebml.NewDefinition("0xE5", ebml.TypeUinteger, "TrackPlaneUID", nil, nil),
-						ebml.NewDefinition("0xE6", ebml.TypeUinteger, "TrackPlaneType", nil, nil),
-					}),
-				}),
-				ebml.NewDefinition("0xE9", ebml.TypeMaster, "TrackJoinBlocks", nil, []ebml.Definition{
-					ebml.NewDefinition("0xED", ebml.TypeUinteger, "TrackJoinUID", nil, nil),
-				}),
-			}),
-			ebml.NewDefinition("0xC0", ebml.TypeUinteger, "TrickTrackUID", nil, nil),
-			ebml.NewDefinition("0xC1", ebml.TypeBinary, "TrickTrackSegmentUID", nil, nil),
-			ebml.NewDefinition("0xC6", ebml.TypeUinteger, "TrickTrackFlag", uint(0), nil),
-			ebml.NewDefinition("0xC7", ebml.TypeUinteger, "TrickMasterTrackUID", nil, nil),
-			ebml.NewDefinition("0xC4", ebml.TypeBinary, "TrickMasterTrackSegmentUID", nil, nil),
-			ebml.NewDefinition("0x6D80", ebml.TypeMaster, "ContentEncodings", nil, []ebml.Definition{
-				ebml.NewDefinition("0x6240", ebml.TypeMaster, "ContentEncoding", nil, []ebml.Definition{
-					ebml.NewDefinition("0x5031", ebml.TypeUinteger, "ContentEncodingOrder", uint(0), nil),
-					ebml.NewDefinition("0x5032", ebml.TypeUinteger, "ContentEncodingScope", uint(1), nil),
-					ebml.NewDefinition("0x5033", ebml.TypeUinteger, "ContentEncodingType", uint(0), nil),
-					ebml.NewDefinition("0x5034", ebml.TypeMaster, "ContentCompression", nil, []ebml.Definition{
-						ebml.NewDefinition("0x4254", ebml.TypeUinteger, "ContentCompAlgo", uint(0), nil),
-						ebml.NewDefinition("0x4255", ebml.TypeBinary, "ContentCompSettings", nil, nil),
-					}),
-					ebml.NewDefinition("0x5035", ebml.TypeMaster, "ContentEncryption", nil, []ebml.Definition{
-						ebml.NewDefinition("0x47E1", ebml.TypeUinteger, "ContentEncAlgo", uint(0), nil),
-						ebml.NewDefinition("0x47E2", ebml.TypeBinary, "ContentEncKeyID", nil, nil),
-						ebml.NewDefinition("0x47E7", ebml.TypeMaster, "ContentEncAESSettings", nil, []ebml.Definition{
-							ebml.NewDefinition("0x47E8", ebml.TypeUinteger, "AESSettingsCipherMode", nil, nil),
-						}),
-						ebml.NewDefinition("0x47E3", ebml.TypeBinary, "ContentSignature", nil, nil),
-						ebml.NewDefinition("0x47E4", ebml.TypeBinary, "ContentSigKeyID", nil, nil),
-						ebml.NewDefinition("0x47E5", ebml.TypeUinteger, "ContentSigAlgo", uint(0), nil),
-						ebml.NewDefinition("0x47E6", ebml.TypeUinteger, "ContentSigHashAlgo", uint(0), nil),
-					}),
-				}),
-			}),
-		}),
-	}),
-	ebml.NewDefinition("0x1C53BB6B", ebml.TypeMaster, "Cues", nil, []ebml.Definition{
-		ebml.NewDefinition("0xBB", ebml.TypeMaster, "CuePoint", nil, []ebml.Definition{
-			ebml.NewDefinition("0xB3", ebml.TypeUinteger, "CueTime", nil, nil),
-			ebml.NewDefinition("0xB7", ebml.TypeMaster, "CueTrackPositions", nil, []ebml.Definition{
-				ebml.NewDefinition("0xF7", ebml.TypeUinteger, "CueTrack", nil, nil),
-				ebml.NewDefinition("0xF1", ebml.TypeUinteger, "CueClusterPosition", nil, nil),
-				ebml.NewDefinition("0xF0", ebml.TypeUinteger, "CueRelativePosition", nil, nil),
-				ebml.NewDefinition("0xB2", ebml.TypeUinteger, "CueDuration", nil, nil),
-				ebml.NewDefinition("0x5378", ebml.TypeUinteger, "CueBlockNumber", uint(1), nil),
-				ebml.NewDefinition("0xEA", ebml.TypeUinteger, "CueCodecState", uint(0), nil),
-				ebml.NewDefinition("0xDB", ebml.TypeMaster, "CueReference", nil, []ebml.Definition{
-					ebml.NewDefinition("0x96", ebml.TypeUinteger, "CueRefTime", nil, nil),
-					ebml.NewDefinition("0x97", ebml.TypeUinteger, "CueRefCluster", nil, nil),
-					ebml.NewDefinition("0x535F", ebml.TypeUinteger, "CueRefNumber", uint(1), nil),
-					ebml.NewDefinition("0xEB", ebml.TypeUinteger, "CueRefCodecState", uint(0), nil),
-				}),
-			}),
-		}),
-	}),
-	ebml.NewDefinition("0x1941A469", ebml.TypeMaster, "Attachments", nil, []ebml.Definition{
-		ebml.NewDefinition("0x61A7", ebml.TypeMaster, "AttachedFile", nil, []ebml.Definition{
-			ebml.NewDefinition("0x467E", ebml.TypeUTF8, "FileDescription", nil, nil),
-			ebml.NewDefinition("0x466E", ebml.TypeUTF8, "FileName", nil, nil),
-			ebml.NewDefinition("0x4660", ebml.TypeString, "FileMimeType", nil, nil),
-			ebml.NewDefinition("0x465C", ebml.TypeBinary, "FileData", nil, nil),
-			ebml.NewDefinition("0x46AE", ebml.TypeUinteger, "FileUID", nil, nil),
-			ebml.NewDefinition("0x4675", ebml.TypeBinary, "FileReferral", nil, nil),
-			ebml.NewDefinition("0x4661", ebml.TypeUinteger, "FileUsedStartTime", nil, nil),
-			ebml.NewDefinition("0x4662", ebml.TypeUinteger, "FileUsedEndTime", nil, nil),
-		}),
-	}),
-	ebml.NewDefinition("0x1043A770", ebml.TypeMaster, "Chapters", nil, []ebml.Definition{
-		ebml.NewDefinition("0x45B9", ebml.TypeMaster, "EditionEntry", nil, []ebml.Definition{
-			ebml.NewDefinition("0x45BC", ebml.TypeUinteger, "EditionUID", nil, nil),
-			ebml.NewDefinition("0x45BD", ebml.TypeUinteger, "EditionFlagHidden", uint(0), nil),
-			ebml.NewDefinition("0x45DB", ebml.TypeUinteger, "EditionFlagDefault", uint(0), nil),
-			ebml.NewDefinition("0x45DD", ebml.TypeUinteger, "EditionFlagOrdered", uint(0), nil),
-			ebml.NewDefinition("0xB6", ebml.TypeMaster, "ChapterAtom", nil, []ebml.Definition{
-				ebml.NewDefinition("0x73C4", ebml.TypeUinteger, "ChapterUID", nil, nil),
-				ebml.NewDefinition("0x5654", ebml.TypeUTF8, "ChapterStringUID", nil, nil),
-				ebml.NewDefinition("0x91", ebml.TypeUinteger, "ChapterTimeStart", nil, nil),
-				ebml.NewDefinition("0x92", ebml.TypeUinteger, "ChapterTimeEnd", nil, nil),
-				ebml.NewDefinition("0x98", ebml.TypeUinteger, "ChapterFlagHidden", uint(0), nil),
-				ebml.NewDefinition("0x4598", ebml.TypeUinteger, "ChapterFlagEnabled", uint(1), nil),
-				ebml.NewDefinition("0x6E67", ebml.TypeBinary, "ChapterSegmentUID", nil, nil),
-				ebml.NewDefinition("0x6EBC", ebml.TypeUinteger, "ChapterSegmentEditionUID", nil, nil),
-				ebml.NewDefinition("0x63C3", ebml.TypeUinteger, "ChapterPhysicalEquiv", nil, nil),
-				ebml.NewDefinition("0x8F", ebml.TypeMaster, "ChapterTrack", nil, []ebml.Definition{
-					ebml.NewDefinition("0x89", ebml.TypeUinteger, "ChapterTrackUID", nil, nil),
-				}),
-				ebml.NewDefinition("0x80", ebml.TypeMaster, "ChapterDisplay", nil, []ebml.Definition{
-					ebml.NewDefinition("0x85", ebml.TypeUTF8, "ChapString", nil, nil),
-					ebml.NewDefinition("0x437C", ebml.TypeString, "ChapLanguage", "eng", nil),
-					ebml.NewDefinition("0x437D", ebml.TypeString, "ChapLanguageIETF", nil, nil),
-					ebml.NewDefinition("0x437E", ebml.TypeString, "ChapCountry", nil, nil),
-				}),
-				ebml.NewDefinition("0x6944", ebml.TypeMaster, "ChapProcess", nil, []ebml.Definition{
-					ebml.NewDefinition("0x6955", ebml.TypeUinteger, "ChapProcessCodecID", uint(0), nil),
-					ebml.NewDefinition("0x450D", ebml.TypeBinary, "ChapProcessPrivate", nil, nil),
-					ebml.NewDefinition("0x6911", ebml.TypeMaster, "ChapProcessCommand", nil, []ebml.Definition{
-						ebml.NewDefinition("0x6922", ebml.TypeUinteger, "ChapProcessTime", nil, nil),
-						ebml.NewDefinition("0x6933", ebml.TypeBinary, "ChapProcessData", nil, nil),
-					}),
-				}),
-			}),
-		}),
-	}),
-	ebml.NewDefinition("0x1254C367", ebml.TypeMaster, "Tags", nil, []ebml.Definition{
-		ebml.NewDefinition("0x7373", ebml.TypeMaster, "Tag", nil, []ebml.Definition{
-			ebml.NewDefinition("0x63C0", ebml.TypeMaster, "Targets", nil, []ebml.Definition{
-				ebml.NewDefinition("0x68CA", ebml.TypeUinteger, "TargetTypeValue", uint(50), nil),
-				ebml.NewDefinition("0x63CA", ebml.TypeString, "TargetType", nil, nil),
-				ebml.NewDefinition("0x63C5", ebml.TypeUinteger, "TagTrackUID", uint(0), nil),
-				ebml.NewDefinition("0x63C9", ebml.TypeUinteger, "TagEditionUID", uint(0), nil),
-				ebml.NewDefinition("0x63C4", ebml.TypeUinteger, "TagChapterUID", uint(0), nil),
-				ebml.NewDefinition("0x63C6", ebml.TypeUinteger, "TagAttachmentUID", uint(0), nil),
-			}),
-			ebml.NewDefinition("0x67C8", ebml.TypeMaster, "SimpleTag", nil, []ebml.Definition{
-				ebml.NewDefinition("0x45A3", ebml.TypeUTF8, "TagName", nil, nil),
-				ebml.NewDefinition("0x447A", ebml.TypeString, "TagLanguage", "und", nil),
-				ebml.NewDefinition("0x447B", ebml.TypeString, "TagLanguageIETF", nil, nil),
-				ebml.NewDefinition("0x4484", ebml.TypeUinteger, "TagDefault", uint(1), nil),
-				ebml.NewDefinition("0x4487", ebml.TypeUTF8, "TagString", nil, nil),
-				ebml.NewDefinition("0x4485", ebml.TypeBinary, "TagBinary", nil, nil),
-			}),
-		}),
-	}),
-})
+//go:embed ebml_matroska.xml
+var DocType []byte
 
 type Segment struct {
 	SeekHead    []SeekHead
@@ -413,6 +118,11 @@ type TrackEntry struct {
 	FlagEnabled                 uint
 	FlagDefault                 uint
 	FlagForced                  uint
+	FlagHearingImpaired         uint
+	FlagVisualImpaired          uint
+	FlagTextDescriptions        uint
+	FlagOriginal                uint
+	FlagCommentary              uint
 	FlagLacing                  uint
 	MinCache                    uint
 	MaxCache                    uint
@@ -633,6 +343,7 @@ type EditionEntry struct {
 }
 
 type ChapterAtom struct {
+	ChapterAtom              *ChapterAtom
 	ChapterUID               uint
 	ChapterStringUID         string
 	ChapterTimeStart         uint
@@ -688,10 +399,12 @@ type Targets struct {
 }
 
 type SimpleTag struct {
+	SimpleTag       *SimpleTag
 	TagName         string
 	TagLanguage     string
 	TagLanguageIETF string
 	TagDefault      uint
+	TagDefaultBogus uint
 	TagString       string
 	TagBinary       []byte
 }

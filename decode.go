@@ -3,9 +3,13 @@ package ebml
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
+	"github.com/coding-socks/ebml/internal/ebmlpath"
+	"github.com/coding-socks/ebml/internal/schema"
 	"io"
 	"math"
 	"reflect"
+	"strconv"
 	"time"
 )
 
@@ -55,7 +59,7 @@ func (d *Decoder) DecodeHeader() (EBML, error) {
 	var v EBML
 	val := reflect.ValueOf(&v)
 
-	if err := d.decodeRoot(val.Elem(), HeaderDocType); err != nil {
+	if err := d.decodeRoot(val.Elem(), HeaderDocType, `\EBML`); err != nil {
 		if err == io.EOF {
 			err = io.ErrUnexpectedEOF
 		}
@@ -72,11 +76,11 @@ func (d *Decoder) DecodeBody(header EBML, v interface{}) error {
 	if val.Kind() != reflect.Ptr || val.IsNil() {
 		return &InvalidDecodeError{reflect.TypeOf(v)}
 	}
-	bodyDef, err := getDefinition(header.DocType)
+	bodyDef, err := definition(header.DocType)
 	if err != nil {
 		return err
 	}
-	if err := d.decodeRoot(val.Elem(), bodyDef); err != nil {
+	if err := d.decodeRoot(val.Elem(), bodyDef, `\Segment`); err != nil {
 		if err == io.EOF {
 			err = nil
 		}
@@ -103,7 +107,7 @@ func findField(val reflect.Value, tinfo *typeInfo, name string) (fieldv reflect.
 	return
 }
 
-func (d *Decoder) decodeRoot(val reflect.Value, def Definition) error {
+func (d *Decoder) decodeRoot(val reflect.Value, s schema.Schema, path string) error {
 	// Load value from interface, but only if the result will be
 	// usefully addressable.
 	if val.Kind() == reflect.Interface && !val.IsNil() {
@@ -120,14 +124,18 @@ func (d *Decoder) decodeRoot(val reflect.Value, def Definition) error {
 		val = val.Elem()
 	}
 
-	el, err := d.element([]Definition{def})
+	eldef, ok := s.Query(path)
+	if !ok {
+		return fmt.Errorf("ebml: unexpected element path %s", path)
+	}
+	el, err := d.element([]schema.Element{eldef})
 	if err != nil {
 		return err
 	}
-	if el.Definition.ID == CRC32.ID {
+	if el.ID == crc32Id {
 		return errors.New("ebml: unexpected crc-32 element")
 	}
-	if el.Definition.ID == Void.ID {
+	if el.ID == voidId {
 		// TODO: skip void elements
 		return errors.New("ebml: unexpected void element")
 	}
@@ -135,13 +143,13 @@ func (d *Decoder) decodeRoot(val reflect.Value, def Definition) error {
 		return errors.New("ebml: unknown root element type: " + val.Type().String())
 	}
 
-	if err := d.decodeSingle(el, true, val, el.Definition.Children); err != nil {
+	if err := d.decodeSingle(el, true, val, s, path); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (d *Decoder) decodeMaster(val reflect.Value, ds dataSize, defs []Definition) error {
+func (d *Decoder) decodeMaster(val reflect.Value, ds dataSize, s schema.Schema, path string) error {
 	// Load value from interface, but only if the result will be
 	// usefully addressable.
 	if val.Kind() == reflect.Interface && !val.IsNil() {
@@ -176,8 +184,9 @@ func (d *Decoder) decodeMaster(val reflect.Value, ds dataSize, defs []Definition
 		return err
 	}
 
-	occurrences := make(map[string]int, len(defs))
+	occurrences := make(map[string]int, len(s.Elements))
 	start := d.r.Position()
+	children := s.QueryChildren(path)
 	for {
 		// Check size first because it can be 0
 		if ds.Known() {
@@ -189,7 +198,7 @@ func (d *Decoder) decodeMaster(val reflect.Value, ds dataSize, defs []Definition
 			}
 		}
 
-		el, err := d.element(defs)
+		el, err := d.element(children)
 		if err != nil {
 			if err == errInvalidId {
 				continue
@@ -202,9 +211,9 @@ func (d *Decoder) decodeMaster(val reflect.Value, ds dataSize, defs []Definition
 			return err
 		}
 		occurrences[el.ID]++
-		fieldv, found := findField(val, tinfo, el.Definition.Name)
+		fieldv, found := findField(val, tinfo, el.def.Name)
 
-		if err := d.decodeSingle(el, found, fieldv, el.Definition.Children); err != nil {
+		if err := d.decodeSingle(el, found, fieldv, s, ebmlpath.Join(path, el.def.Name)); err != nil {
 			if e, ok := err.(*DecodeTypeError); ok {
 				e.extendError(val.Type().Name())
 			}
@@ -212,41 +221,55 @@ func (d *Decoder) decodeMaster(val reflect.Value, ds dataSize, defs []Definition
 		}
 	}
 
-	for i := range defs {
-		def := defs[i]
-		if def.Default == nil || occurrences[def.ID] > 0 {
+	for i := range s.Elements {
+		sel := s.Elements[i]
+		if sel.Default == nil || occurrences[sel.ID] > 0 {
 			continue
 		}
-		if def.Type == TypeMaster {
+		if sel.Type == TypeMaster {
 			// TODO: catch this when Doc Type is registered.
-			panic("ebml: Master Elements MUST NOT declare a default value.")
+			panic("ebml: master Elements MUST NOT declare a default value.")
 		}
-		fieldv, found := findField(val, tinfo, def.Name)
+		fieldv, found := findField(val, tinfo, sel.Name)
 		if !found {
 			continue
 		}
 		if v := fieldv; v.Kind() == reflect.Slice {
 			e := v.Type().Elem()
-			if !(def.Type == TypeBinary && e.Kind() == reflect.Uint8) {
+			if !(sel.Type == TypeBinary && e.Kind() == reflect.Uint8) {
 				n := v.Len()
 				v.Set(reflect.Append(v, reflect.Zero(e)))
 				fieldv = v.Index(n)
 			}
 		}
 
-		if err := validateReflectType(fieldv, def, d.r.Position()); err != nil {
+		if err := validateReflectType(fieldv, sel, d.r.Position()); err != nil {
 			if e, ok := err.(*DecodeTypeError); ok {
-				e.extendError(def.Name)
+				e.extendError(sel.Name)
 				e.extendError(val.Type().Name())
 			}
 			return err
 		}
-		fieldv.Set(reflect.ValueOf(def.Default))
+		switch sel.Type {
+		case TypeInteger:
+			x, _ := strconv.ParseInt(*sel.Default, 10, 64)
+			fieldv.SetInt(x)
+		case TypeUinteger:
+			x, _ := strconv.ParseUint(*sel.Default, 10, 64)
+			fieldv.SetUint(x)
+		case TypeFloat:
+			x, _ := strconv.ParseFloat(*sel.Default, 64)
+			fieldv.SetFloat(x)
+		case TypeString:
+			fieldv.SetString(*sel.Default)
+		default:
+			return fmt.Errorf("default not supported: %s", sel.Type)
+		}
 	}
 	return nil
 }
 
-func validateReflectType(v reflect.Value, def Definition, position int64) error {
+func validateReflectType(v reflect.Value, def schema.Element, position int64) error {
 	switch def.Type {
 	default:
 		return &DecodeTypeError{EBMLType: def.Type, Type: v.Type(), Offset: position}
@@ -310,27 +333,27 @@ func validateReflectType(v reflect.Value, def Definition, position int64) error 
 	return nil
 }
 
-func (d *Decoder) decodeSingle(el Element, found bool, val reflect.Value, defs []Definition) error {
+func (d *Decoder) decodeSingle(el Element, found bool, val reflect.Value, s schema.Schema, path string) error {
 	if v := val; v.Kind() == reflect.Slice {
 		e := v.Type().Elem()
-		if !(el.Definition.Type == TypeBinary && e.Kind() == reflect.Uint8) {
+		if !(el.def.Type == TypeBinary && e.Kind() == reflect.Uint8) {
 			n := v.Len()
 			v.Set(reflect.Append(v, reflect.Zero(e)))
 			val = v.Index(n)
 		}
 	}
 	if found {
-		if err := validateReflectType(val, el.Definition, d.r.Position()); err != nil {
+		if err := validateReflectType(val, el.def, d.r.Position()); err != nil {
 			if e, ok := err.(*DecodeTypeError); ok {
-				e.extendError(el.Definition.Name)
+				e.extendError(el.def.Name)
 			}
 			return err
 		}
 	}
 
-	switch el.Definition.Type {
+	switch el.def.Type {
 	case TypeMaster:
-		if err := d.decodeMaster(val, el.DataSize, defs); err != nil {
+		if err := d.decodeMaster(val, el.DataSize, s, path); err != nil {
 			return err
 		}
 

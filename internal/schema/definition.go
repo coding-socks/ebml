@@ -1,13 +1,14 @@
 // Package schema contains structs for reading xml definitions
 // for ebml schema.
 //
-// This file should be generated in the future from EBMLSchema.xsd.
+// TODO: Generated from EBMLSchema.xsd.
 //
 // Internal use only.
 package schema
 
 import (
 	"encoding/xml"
+	"github.com/coding-socks/ebml/internal/ebmlpath"
 	"reflect"
 	"strconv"
 )
@@ -26,13 +27,13 @@ type Documentation struct {
 }
 
 var (
-	AttributeMinOccursNote = "minOccurs"
-	AttributeMaxOccursNote = "maxOccurs"
-	AttributeRangeNote     = "range"
-	AttributeLengthNote    = "length"
-	AttributeDefaultNote   = "default"
-	AttributeMinverNote    = "minver"
-	AttributeMaxverNote    = "maxver"
+	NoteAttributeMinOccurs = "minOccurs"
+	NoteAttributeMaxOccurs = "maxOccurs"
+	NoteAttributeRange     = "range"
+	NoteAttributeLength    = "length"
+	NoteAttributeDefault   = "default"
+	NoteAttributeMinver    = "minver"
+	NoteAttributeMaxver    = "maxver"
 )
 
 type Note struct {
@@ -73,19 +74,29 @@ type Element struct {
 	Extension          []Extension     `xml:"extension"`
 
 	Name               string       `xml:"name,attr"`
-	Path               string       `xml:"path,attr"`
+	Path               Path         `xml:"path,attr"`
 	ID                 string       `xml:"id,attr"`
 	MinOccurs          int          `xml:"minOccurs,attr"`
 	MaxOccurs          UnboundedInt `xml:"maxOccurs,attr"`
 	Range              string       `xml:"range,attr"`
 	Length             string       `xml:"length,attr"`
-	Default            string       `xml:"default,attr"`
+	Default            *string      `xml:"default,attr"`
 	Type               string       `xml:"type,attr"`
 	UnknownSizeAllowed bool         `xml:"unknownsizeallowed,attr"`
 	Recursive          bool         `xml:"recursive,attr"`
 	Recurring          bool         `xml:"recurring,attr"`
 	MinVer             int          `xml:"minver,attr"`
 	MaxVer             int          `xml:"maxver,attr"`
+}
+
+type Path struct {
+	*ebmlpath.PathExp
+}
+
+func (p *Path) UnmarshalXMLAttr(attr xml.Attr) error {
+	var err error
+	p.PathExp, err = ebmlpath.Compile(attr.Value)
+	return err
 }
 
 type UnboundedInt struct {
@@ -136,7 +147,7 @@ func (s *Element) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 }
 
 type Schema struct {
-	Element []Element `xml:"element"`
+	Elements []Element `xml:"element"`
 
 	DocType string `xml:"docType,attr"`
 	Version int    `xml:"version,attr"`
@@ -154,6 +165,30 @@ func (s *Schema) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 	}
 	*s = (Schema)(item)
 	return nil
+}
+
+// Query returns the first element which matches the given path.
+func (s *Schema) Query(path string) (Element, bool) {
+	for i := range s.Elements {
+		if s.Elements[i].Path.Match(path) {
+			return s.Elements[i], true
+		}
+	}
+	return Element{}, false
+}
+
+// QueryChildren returns all elements which can be a direct children
+// of the given path.
+func (s *Schema) QueryChildren(path string) []Element {
+	var e []Element
+	for i := range s.Elements {
+		el := s.Elements[i]
+		p := ebmlpath.Join(path, el.Name)
+		if el.Path.Match(p) {
+			e = append(e, el)
+		}
+	}
+	return e
 }
 
 type TreeNode struct {
@@ -183,29 +218,6 @@ func (n *TreeNode) VisitAll(f func(node *TreeNode)) {
 	}
 }
 
-func ResolveType(t string) string {
-	switch t {
-	default:
-		return t
-	case "utf-8":
-		return "TypeUTF8"
-	case "date":
-		return "TypeDate"
-	case "binary":
-		return "TypeBinary"
-	case "float":
-		return "TypeFloat"
-	case "string":
-		return "TypeString"
-	case "integer":
-		return "TypeInteger"
-	case "uinteger":
-		return "TypeUinteger"
-	case "master":
-		return "TypeMaster"
-	}
-}
-
 func ResolveGoType(s, name string) string {
 	switch s {
 	case TypeInteger:
@@ -215,7 +227,7 @@ func ResolveGoType(s, name string) string {
 	case TypeFloat:
 		return reflect.Float64.String()
 	case TypeString:
-		// TODO: Think how should enforce ASCII only characters (in the range of 0x20 to 0x7E).
+		// TODO: Enforce ASCII only characters (in the range of 0x20 to 0x7E).
 		//  https://www.rfc-editor.org/rfc/rfc8794#name-string-element
 		return reflect.String.String()
 	case TypeDate:
