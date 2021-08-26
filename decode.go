@@ -143,7 +143,7 @@ func (d *Decoder) decodeRoot(val reflect.Value, s schema.Schema, path string) er
 		return errors.New("ebml: unknown root element type: " + val.Type().String())
 	}
 
-	if err := d.decodeSingle(el, true, val, s, path); err != nil {
+	if err := d.decodeSingle(el, val, s, path); err != nil {
 		return err
 	}
 	return nil
@@ -212,8 +212,23 @@ func (d *Decoder) decodeMaster(val reflect.Value, ds dataSize, s schema.Schema, 
 		}
 		occurrences[el.ID]++
 		fieldv, found := findField(val, tinfo, el.def.Name)
+		if !found {
+			if el.DataSize.Known() {
+				if err := d.skip(el); err != nil {
+					return fmt.Errorf("ebml: was not able to skip element: %w", err)
+				}
+				continue
+			} else if el.def.Type == TypeMaster {
+				if err := d.decodeMaster(val, el.DataSize, s, ebmlpath.Join(path, el.def.Name)); err != nil {
+					return err
+				}
+				continue
+			} else {
+				return errors.New("ebml: only a master element is allowed to be of unknown size")
+			}
+		}
 
-		if err := d.decodeSingle(el, found, fieldv, s, ebmlpath.Join(path, el.def.Name)); err != nil {
+		if err := d.decodeSingle(el, fieldv, s, ebmlpath.Join(path, el.def.Name)); err != nil {
 			if e, ok := err.(*DecodeTypeError); ok {
 				e.extendError(val.Type().Name())
 			}
@@ -333,7 +348,7 @@ func validateReflectType(v reflect.Value, def schema.Element, position int64) er
 	return nil
 }
 
-func (d *Decoder) decodeSingle(el Element, found bool, val reflect.Value, s schema.Schema, path string) error {
+func (d *Decoder) decodeSingle(el Element, val reflect.Value, s schema.Schema, path string) error {
 	if v := val; v.Kind() == reflect.Slice {
 		e := v.Type().Elem()
 		if !(el.def.Type == TypeBinary && e.Kind() == reflect.Uint8) {
@@ -342,13 +357,11 @@ func (d *Decoder) decodeSingle(el Element, found bool, val reflect.Value, s sche
 			val = v.Index(n)
 		}
 	}
-	if found {
-		if err := validateReflectType(val, el.def, d.r.Position()); err != nil {
-			if e, ok := err.(*DecodeTypeError); ok {
-				e.extendError(el.def.Name)
-			}
-			return err
+	if err := validateReflectType(val, el.def, d.r.Position()); err != nil {
+		if e, ok := err.(*DecodeTypeError); ok {
+			e.extendError(el.def.Name)
 		}
+		return err
 	}
 
 	switch el.def.Type {
@@ -362,54 +375,42 @@ func (d *Decoder) decodeSingle(el Element, found bool, val reflect.Value, s sche
 		if err != nil {
 			return err
 		}
-		if found {
-			val.SetBytes(b)
-		}
+		val.SetBytes(b)
 
 	case TypeDate:
 		t, err := d.readDate(el.DataSize.Size())
 		if err != nil {
 			return err
 		}
-		if found {
-			val.Set(reflect.ValueOf(t))
-		}
+		val.Set(reflect.ValueOf(t))
 
 	case TypeFloat:
 		f, err := d.readFloat(el.DataSize.Size())
 		if err != nil {
 			return err
 		}
-		if found {
-			val.SetFloat(f)
-		}
+		val.SetFloat(f)
 
 	case TypeInteger:
 		i, err := d.readInt(el.DataSize.Size())
 		if err != nil {
 			return err
 		}
-		if found {
-			val.SetInt(i)
-		}
+		val.SetInt(i)
 
 	case TypeUinteger:
 		i, err := d.readUint(el.DataSize.Size())
 		if err != nil {
 			return err
 		}
-		if found {
-			val.SetUint(i)
-		}
+		val.SetUint(i)
 
 	case TypeString, TypeUTF8:
 		str, err := d.readString(el.DataSize.Size())
 		if err != nil {
 			return err
 		}
-		if found {
-			val.SetString(str)
-		}
+		val.SetString(str)
 	}
 	return nil
 }

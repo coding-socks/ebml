@@ -150,7 +150,7 @@ func (d *Decoder) switchToReader(r io.Reader) {
 	d.r = &Reader{r: r}
 }
 
-func (d *Decoder) skip(el *Element) error {
+func (d *Decoder) skip(el Element) error {
 	_, err := io.CopyN(ioutil.Discard, d.r, el.DataSize.Size())
 	return err
 }
