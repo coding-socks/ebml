@@ -46,7 +46,15 @@ func Register(docType string, s schema.Schema) {
 	if _, dup := docTypes[docType]; dup {
 		panic("ebml: register called twice for docType " + docType)
 	}
-	s.Elements = append(s.Elements, HeaderDocType.Elements...)
+	set := make(map[string]bool, len(s.Elements))
+	for i := range s.Elements {
+		set[s.Elements[i].ID] = true
+	}
+	for i := range HeaderDocType.Elements {
+		if !set[HeaderDocType.Elements[i].ID] {
+			s.Elements = append(s.Elements, HeaderDocType.Elements[i])
+		}
+	}
 	docTypes[docType] = s
 }
 
