@@ -20,7 +20,7 @@ func Join(elem ...string) string {
 	buf := make([]byte, 0, size+len(elem)-1)
 	for _, e := range elem {
 		if len(buf) > 0 || e != "" {
-			if len(buf) > 0 {
+			if len(buf) > 0 || !strings.HasPrefix(e, "\\") {
 				buf = append(buf, '\\')
 			}
 			buf = append(buf, e...)

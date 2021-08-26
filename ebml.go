@@ -23,6 +23,7 @@ var (
 	docTypesMu sync.RWMutex
 	docTypes   = make(map[string]schema.Schema)
 
+	ebmlId  = "0x1A45DFA3"
 	crc32Id = "0xBF"
 	voidId  = "0xEC"
 

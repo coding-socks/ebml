@@ -80,7 +80,17 @@ func (d *Decoder) DecodeBody(header EBML, v interface{}) error {
 	if err != nil {
 		return err
 	}
-	if err := d.decodeRoot(val.Elem(), bodyDef, `\Segment`); err != nil {
+	root := bodyDef.QueryChildren("")
+	var bodyRoots []schema.Element
+	for _, el := range root {
+		if el.ID != voidId && el.ID != ebmlId {
+			bodyRoots = append(bodyRoots, el)
+		}
+	}
+	if len(bodyRoots) != 1 {
+		panic("ebml: an EBML schema MUST declare exactly one EBML element at root level")
+	}
+	if err := d.decodeRoot(val.Elem(), bodyDef, ebmlpath.Join("", bodyRoots[0].Name)); err != nil {
 		if err == io.EOF {
 			err = nil
 		}
