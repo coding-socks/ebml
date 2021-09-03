@@ -31,11 +31,11 @@ func clearBit(n byte, pos int) byte {
 	return n
 }
 
-func vintDataAllOne(b []byte, w int) bool {
+func vintDataAllOne(b []byte, l int) bool {
 	var oc int
-	for i := 0; i < w; i++ {
-		bb := b[i]
-		oc += bits.OnesCount8(bb)
+	for i := 0; i < l; i++ {
+		oc += bits.OnesCount8(b[i])
 	}
-	return oc == (w*8 - w)
+	m := l % 8
+	return oc == (l*8 - m)
 }

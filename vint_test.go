@@ -104,3 +104,63 @@ func Test_vintData(t *testing.T) {
 		})
 	}
 }
+
+func Test_vintDataAllOne(t *testing.T) {
+	type args struct {
+		b []byte
+		l int
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{
+			name: "1 byte all 1",
+			args: args{b: []byte{0x7f}, l: 1},
+			want: true,
+		},
+		{
+			name: "1 byte not all 1",
+			args: args{b: []byte{0x70}, l: 1},
+			want: false,
+		},
+		{
+			name: "2 byte all 1",
+			args: args{b: []byte{0x3f, 0xff}, l: 2},
+			want: true,
+		},
+		{
+			name: "2 byte not all 1",
+			args: args{b: []byte{0x3f, 0xf0}, l: 2},
+			want: false,
+		},
+		{
+			name: "9 byte all 1",
+			args: args{b: []byte{0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}, l: 9},
+			want: true,
+		},
+		{
+			name: "9 byte not all 1",
+			args: args{b: []byte{0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xf0}, l: 9},
+			want: false,
+		},
+		{
+			name: "10 byte all 1",
+			args: args{b: []byte{0x3f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}, l: 10},
+			want: true,
+		},
+		{
+			name: "10 byte not all 1",
+			args: args{b: []byte{0x3f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xf0}, l: 10},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := vintDataAllOne(tt.args.b, tt.args.l); got != tt.want {
+				t.Errorf("vintDataAllOne() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
