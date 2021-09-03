@@ -88,16 +88,16 @@ const (
 
 type dsMode int
 
-type dataSize struct {
+type DataSize struct {
 	m dsMode
 	s int64
 }
 
-func (ds *dataSize) Known() bool {
+func (ds *DataSize) Known() bool {
 	return ds.m == knownDS
 }
 
-func (ds *dataSize) Size() int64 {
+func (ds *DataSize) Size() int64 {
 	return ds.s
 }
 
@@ -105,7 +105,7 @@ type Element struct {
 	def schema.Element
 
 	ID       string
-	DataSize dataSize
+	DataSize DataSize
 }
 
 // A Decoder represents an EBML parser reading a particular input stream.
@@ -181,11 +181,11 @@ func (d *Decoder) element(elements []schema.Element) (el Element, err error) {
 		el = *d.elCache
 		d.elCache = nil
 	} else {
-		el.ID, err = d.elementID()
+		el.ID, err = ReadElementID(d.r, d.maxIDLength)
 		if err != nil {
 			return Element{}, err
 		}
-		el.DataSize, err = d.elementDataSize()
+		el.DataSize, err = ReadElementDataSize(d.r, d.maxSizeLength)
 		if err != nil {
 			return Element{}, err
 		}
@@ -218,19 +218,20 @@ func validateIDData(data []byte, w int) error {
 
 var errInvalidId = fmt.Errorf("ebml: invalid length descriptor")
 
-// The octet length of an Element ID determines its EBML Class.
-func (d *Decoder) elementID() (string, error) {
-	b := make([]byte, d.maxIDLength)
+// ReadElementID reads an Element ID based on
+// https://datatracker.ietf.org/doc/html/rfc8794#section-5
+func ReadElementID(r io.Reader, maxIDLength uint) (string, error) {
+	b := make([]byte, maxIDLength)
 	// TODO: EBMLMaxIDLength can be greater than 8
 	//   https://tools.ietf.org/html/rfc8794#section-11.2.4
-	if _, err := d.r.Read(b[:1]); err != nil {
+	if _, err := r.Read(b[:1]); err != nil {
 		return "", err
 	}
 	w := vintOctetLength(b)
 	if w > len(b) {
 		return "", errInvalidId
 	}
-	if _, err := d.r.Read(b[1:w]); err != nil {
+	if _, err := r.Read(b[1:w]); err != nil {
 		return "", err
 	}
 	data := vintData(b, w)
@@ -246,40 +247,23 @@ func dataPad(b []byte) []byte {
 	return db
 }
 
-func (d *Decoder) elementDataSize() (dataSize, error) {
-	b := make([]byte, d.maxSizeLength)
-	// TODO: EBMLMaxSizeLength can be greater than 8
-	//   https://tools.ietf.org/html/rfc8794#section-11.2.5
-	if _, err := d.r.Read(b[:1]); err != nil {
-		return dataSize{}, err
-	}
-	w := vintOctetLength(b)
-	if _, err := d.r.Read(b[1:w]); err != nil {
-		return dataSize{}, err
-	}
-	ds := vintData(b, w)
-	if vintDataAllOne(ds, w) {
-		return dataSize{m: unknownDS}, nil
-	}
-	i := binary.BigEndian.Uint64(dataPad(ds))
-	return dataSize{s: int64(i)}, nil
-}
-
-func DecodeDataSize(r io.Reader) (dataSize, error) {
-	b := make([]byte, 8)
+// ReadElementDataSize reads an Element ID based on
+// https://datatracker.ietf.org/doc/html/rfc8794#section-6
+func ReadElementDataSize(r io.Reader, maxSizeLength uint) (DataSize, error) {
+	b := make([]byte, maxSizeLength)
 	// TODO: EBMLMaxSizeLength can be greater than 8
 	//   https://tools.ietf.org/html/rfc8794#section-11.2.5
 	if _, err := r.Read(b[:1]); err != nil {
-		return dataSize{}, err
+		return DataSize{}, err
 	}
 	w := vintOctetLength(b)
 	if _, err := r.Read(b[1:w]); err != nil {
-		return dataSize{}, err
+		return DataSize{}, err
 	}
 	ds := vintData(b, w)
 	if vintDataAllOne(ds, w) {
-		return dataSize{m: unknownDS}, nil
+		return DataSize{m: unknownDS}, nil
 	}
 	i := binary.BigEndian.Uint64(dataPad(ds))
-	return dataSize{s: int64(i)}, nil
+	return DataSize{s: int64(i)}, nil
 }

@@ -159,7 +159,7 @@ func (d *Decoder) decodeRoot(val reflect.Value, s schema.Schema, path string) er
 	return nil
 }
 
-func (d *Decoder) decodeMaster(val reflect.Value, ds dataSize, s schema.Schema, path string) error {
+func (d *Decoder) decodeMaster(val reflect.Value, ds DataSize, s schema.Schema, path string) error {
 	// Load value from interface, but only if the result will be
 	// usefully addressable.
 	if val.Kind() == reflect.Interface && !val.IsNil() {
