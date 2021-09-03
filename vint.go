@@ -19,8 +19,10 @@ func vintOctetLength(b []byte) int {
 
 func vintData(b []byte, l int) []byte {
 	data := make([]byte, l)
-	copy(data, b[:l])
-	data[0] = clearBit(data[0], 8-l)
+	i := (l - 1) / 8
+	copy(data, b[i:l+i])
+	j := 8 - (l % 8)
+	data[0] = clearBit(data[0], j)
 	return data
 }
 
