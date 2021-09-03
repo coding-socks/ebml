@@ -1,7 +1,3 @@
-// Package vint implements Variable-Size Integer manipulation
-// functions for some of the predeclared unsigned integer types.
-//
-// https://tools.ietf.org/html/rfc8794#section-4
 package ebml
 
 import (
