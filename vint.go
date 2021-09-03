@@ -4,11 +4,11 @@ import (
 	"math/bits"
 )
 
-func vintOctetLength(vint []byte) int {
+func vintOctetLength(b []byte) int {
 	var zc int
-	n := len(vint)
+	n := len(b)
 	for i := 0; i < n; i++ {
-		x := bits.LeadingZeros8(vint[i])
+		x := bits.LeadingZeros8(b[i])
 		zc += x
 		if x < 8 {
 			break
@@ -17,9 +17,9 @@ func vintOctetLength(vint []byte) int {
 	return zc + 1
 }
 
-func vintData(vint []byte, l int) []byte {
+func vintData(b []byte, l int) []byte {
 	data := make([]byte, l)
-	copy(data, vint[:l])
+	copy(data, b[:l])
 	data[0] = clearBit(data[0], 8-l)
 	return data
 }
