@@ -19,10 +19,10 @@ func vintOctetLength(b []byte) int {
 
 func vintData(b []byte, l int) []byte {
 	data := make([]byte, l)
+	copy(data, b[:l])
 	i := (l - 1) / 8
-	copy(data, b[i:l+i])
 	j := 8 - (l % 8)
-	data[0] = clearBit(data[0], j)
+	data[i] = clearBit(data[i], j)
 	return data
 }
 
@@ -36,6 +36,5 @@ func vintDataAllOne(b []byte, l int) bool {
 	for i := 0; i < l; i++ {
 		oc += bits.OnesCount8(b[i])
 	}
-	m := l % 8
-	return oc == (l*8 - m)
+	return oc == (l*8 - l)
 }
