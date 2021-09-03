@@ -54,8 +54,8 @@ func (e *InvalidDecodeError) Error() string {
 	return "ebml: Unmarshal(nil " + e.Type.String() + ")"
 }
 
-// DecodeHeader decodes the document header.
-func (d *Decoder) DecodeHeader() (EBML, error) {
+// decodeHeader decodes the document header.
+func (d *Decoder) decodeHeader() (EBML, error) {
 	var v EBML
 	val := reflect.ValueOf(&v)
 
@@ -71,12 +71,12 @@ func (d *Decoder) DecodeHeader() (EBML, error) {
 // DecodeBody decodes the EBML Body and stores the result in the value
 // pointed to by v. If v is nil or not a pointer, DecodeBody returns
 // an InvalidDecodeError.
-func (d *Decoder) DecodeBody(header EBML, v interface{}) error {
+func (d *Decoder) DecodeBody(v interface{}) error {
 	val := reflect.ValueOf(v)
 	if val.Kind() != reflect.Ptr || val.IsNil() {
 		return &InvalidDecodeError{reflect.TypeOf(v)}
 	}
-	bodyDef, err := definition(header.DocType)
+	bodyDef, err := definition(d.Header.DocType)
 	if err != nil {
 		return err
 	}

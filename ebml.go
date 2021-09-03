@@ -109,9 +109,9 @@ type Element struct {
 }
 
 // A Decoder represents an EBML parser reading a particular input stream.
-// Decoding one document consists of calling DecodeHeader and then DecodeBody
-// in that order.
 type Decoder struct {
+	Header EBML
+
 	// https://tools.ietf.org/html/rfc8794#section-11.2.4
 	maxIDLength uint
 	// https://tools.ietf.org/html/rfc8794#section-11.2.5
@@ -122,14 +122,19 @@ type Decoder struct {
 	elCache *Element
 }
 
-// NewDecoder creates a new EBML parser reading from r.
-func NewDecoder(r io.Reader) *Decoder {
+// ReadDocument reads and parses an EBML Document from r.
+func ReadDocument(r io.Reader) (*Decoder, error) {
 	d := &Decoder{
 		maxIDLength:   4,
 		maxSizeLength: 8,
 	}
 	d.switchToReader(r)
-	return d
+	var err error
+	d.Header, err = d.decodeHeader()
+	if err != nil {
+		return nil, err
+	}
+	return d, nil
 }
 
 type Reader struct {
@@ -248,6 +253,25 @@ func (d *Decoder) elementDataSize() (dataSize, error) {
 	}
 	w := vintOctetLength(b)
 	if _, err := d.r.Read(b[1:w]); err != nil {
+		return dataSize{}, err
+	}
+	ds := vintData(b, w)
+	if vintDataAllOne(ds, w) {
+		return dataSize{m: unknownDS}, nil
+	}
+	i := binary.BigEndian.Uint64(dataPad(ds))
+	return dataSize{s: int64(i)}, nil
+}
+
+func DecodeDataSize(r io.Reader) (dataSize, error) {
+	b := make([]byte, 8)
+	// TODO: EBMLMaxSizeLength can be greater than 8
+	//   https://tools.ietf.org/html/rfc8794#section-11.2.5
+	if _, err := r.Read(b[:1]); err != nil {
+		return dataSize{}, err
+	}
+	w := vintOctetLength(b)
+	if _, err := r.Read(b[1:w]); err != nil {
 		return dataSize{}, err
 	}
 	ds := vintData(b, w)
