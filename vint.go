@@ -8,13 +8,13 @@ func vintOctetLength(vint []byte) int {
 	var zc int
 	n := len(vint)
 	for i := 0; i < n; i++ {
-		x := bits.LeadingZeros8(vint[0])
+		x := bits.LeadingZeros8(vint[i])
 		zc += x
 		if x < 8 {
 			break
 		}
 	}
-	return bits.LeadingZeros8(vint[0]) + 1
+	return zc + 1
 }
 
 func vintData(vint []byte, l int) []byte {
