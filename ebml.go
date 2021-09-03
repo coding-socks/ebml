@@ -134,6 +134,8 @@ func ReadDocument(r io.Reader) (*Decoder, error) {
 	if err != nil {
 		return nil, err
 	}
+	d.maxIDLength = d.Header.EBMLMaxIDLength
+	d.maxSizeLength = d.Header.EBMLMaxSizeLength
 	return d, nil
 }
 
