@@ -33,15 +33,6 @@ func clearBit(n byte, pos int) byte {
 	return n
 }
 
-func vintDataAllZero(b []byte, w int) bool {
-	var zc int
-	for i := 0; i < w; i++ {
-		bb := b[i]
-		zc += 8 - bits.OnesCount8(bb)
-	}
-	return zc == (w * 8)
-}
-
 func vintDataAllOne(b []byte, w int) bool {
 	var oc int
 	for i := 0; i < w; i++ {
