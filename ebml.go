@@ -223,8 +223,10 @@ func ReadElementID(r io.Reader, maxIDLength uint) (string, error) {
 	if w > len(b) {
 		return "", errInvalidId
 	}
-	if _, err := r.Read(b[1:w]); err != nil {
-		return "", err
+	if w != 1 {
+		if _, err := r.Read(b[1:w]); err != nil {
+			return "", err
+		}
 	}
 	data := vintData(b, w)
 	if vintDataAllOne(data, w) {
