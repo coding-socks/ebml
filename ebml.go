@@ -208,14 +208,6 @@ func (d *Decoder) element(elements []schema.Element) (el Element, err error) {
 	return el, nil
 }
 
-// https://tools.ietf.org/html/rfc8794#section-5
-func validateIDData(data []byte, w int) error {
-	if vintDataAllOne(data, w) {
-		return errors.New("VINT_DATA MUST NOT be set to all 1")
-	}
-	return nil
-}
-
 var errInvalidId = fmt.Errorf("ebml: invalid length descriptor")
 
 // ReadElementID reads an Element ID based on
@@ -235,8 +227,8 @@ func ReadElementID(r io.Reader, maxIDLength uint) (string, error) {
 		return "", err
 	}
 	data := vintData(b, w)
-	if err := validateIDData(data, w); err != nil {
-		return "", err
+	if vintDataAllOne(data, w) {
+		return "", errors.New("VINT_DATA MUST NOT be set to all 1")
 	}
 	return "0x" + strings.ToUpper(hex.EncodeToString(b[:w])), nil
 }
