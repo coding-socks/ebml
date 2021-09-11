@@ -8,7 +8,6 @@ package schema
 
 import (
 	"encoding/xml"
-	"github.com/coding-socks/ebml/internal/ebmlpath"
 	"reflect"
 	"strconv"
 )
@@ -74,7 +73,7 @@ type Element struct {
 	Extension          []Extension     `xml:"extension"`
 
 	Name               string       `xml:"name,attr"`
-	Path               Path         `xml:"path,attr"`
+	Path               string       `xml:"path,attr"`
 	ID                 string       `xml:"id,attr"`
 	MinOccurs          int          `xml:"minOccurs,attr"`
 	MaxOccurs          UnboundedInt `xml:"maxOccurs,attr"`
@@ -87,16 +86,6 @@ type Element struct {
 	Recurring          bool         `xml:"recurring,attr"`
 	MinVer             int          `xml:"minver,attr"`
 	MaxVer             int          `xml:"maxver,attr"`
-}
-
-type Path struct {
-	*ebmlpath.PathExp
-}
-
-func (p *Path) UnmarshalXMLAttr(attr xml.Attr) error {
-	var err error
-	p.PathExp, err = ebmlpath.Compile(attr.Value)
-	return err
 }
 
 type UnboundedInt struct {
@@ -165,30 +154,6 @@ func (s *Schema) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 	}
 	*s = (Schema)(item)
 	return nil
-}
-
-// Query returns the first element which matches the given path.
-func (s *Schema) Query(path string) (Element, bool) {
-	for i := range s.Elements {
-		if s.Elements[i].Path.Match(path) {
-			return s.Elements[i], true
-		}
-	}
-	return Element{}, false
-}
-
-// QueryChildren returns all elements which can be a direct children
-// of the given path.
-func (s *Schema) QueryChildren(path string) []Element {
-	var e []Element
-	for i := range s.Elements {
-		el := s.Elements[i]
-		p := ebmlpath.Join(path, el.Name)
-		if el.Path.Match(p) {
-			e = append(e, el)
-		}
-	}
-	return e
 }
 
 type TreeNode struct {

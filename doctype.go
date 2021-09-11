@@ -7,6 +7,22 @@ import _ "embed"
 //go:embed ebml.xml
 var schemaDefinition []byte
 
+var (
+	IDEBML                    = "0x1A45DFA3"
+	IDEBMLVersion             = "0x4286"
+	IDEBMLReadVersion         = "0x42F7"
+	IDEBMLMaxIDLength         = "0x42F2"
+	IDEBMLMaxSizeLength       = "0x42F3"
+	IDDocType                 = "0x4282"
+	IDDocTypeVersion          = "0x4287"
+	IDDocTypeReadVersion      = "0x4285"
+	IDDocTypeExtension        = "0x4281"
+	IDDocTypeExtensionName    = "0x4283"
+	IDDocTypeExtensionVersion = "0x4284"
+	IDVoid                    = "0xEC"
+	IDCRC32                   = "0xBF"
+)
+
 type EBML struct {
 	EBMLVersion        uint
 	EBMLReadVersion    uint

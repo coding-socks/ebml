@@ -51,6 +51,16 @@ func TestDecode(t *testing.T) {
 			source:   "https://github.com/Matroska-Org/matroska-test-files/blob/master/test_files/test1.mkv?raw=true",
 		},
 		{
+			name:     "Non default timecodescale & aspect ratio",
+			filename: "test2.mkv",
+			source:   "https://github.com/Matroska-Org/matroska-test-files/blob/master/test_files/test2.mkv?raw=true",
+		},
+		{
+			name:     "Header stripping & standard block",
+			filename: "test3.mkv",
+			source:   "https://github.com/Matroska-Org/matroska-test-files/blob/master/test_files/test3.mkv?raw=true",
+		},
+		{
 			name:     "Live stream recording",
 			filename: "test4.mkv",
 			source:   "https://github.com/Matroska-Org/matroska-test-files/blob/master/test_files/test4.mkv?raw=true",
@@ -64,6 +74,16 @@ func TestDecode(t *testing.T) {
 			name:     "Different EBML head sizes & cue-less seeking",
 			filename: "test6.mkv",
 			source:   "https://github.com/Matroska-Org/matroska-test-files/blob/master/test_files/test6.mkv?raw=true",
+		},
+		{
+			name:     "Extra unknown/junk elements & damaged",
+			filename: "test7.mkv",
+			source:   "https://github.com/Matroska-Org/matroska-test-files/blob/master/test_files/test7.mkv?raw=true",
+		},
+		{
+			name:     "Audio gap",
+			filename: "test8.mkv",
+			source:   "https://github.com/Matroska-Org/matroska-test-files/blob/master/test_files/test8.mkv?raw=true",
 		},
 	}
 	for _, tt := range tests {
@@ -81,13 +101,14 @@ func TestDecode(t *testing.T) {
 				}
 			}
 			defer f.Close()
-			d, err := ebml.ReadDocument(f)
+			d := ebml.NewDecoder(f)
+			header, err := d.DecodeHeader()
 			if err != nil {
 				t.Fatal(err)
 			}
-			log.Printf("%+v", d.Header)
+			log.Printf("%+v", header)
 			var b Segment
-			if err = d.DecodeBody(&b); err != nil {
+			if err = d.DecodeBody(&b); err != nil && err != io.EOF {
 				t.Error(err)
 			}
 			log.Printf("%+v", b.Info)

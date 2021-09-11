@@ -9,7 +9,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
-	"github.com/coding-socks/ebml/internal/schema"
+	"github.com/coding-socks/ebml/schema"
 	"golang.org/x/tools/imports"
 	"io"
 	"io/ioutil"
@@ -66,7 +66,7 @@ func gen(w io.Writer) {
 			}
 		}()
 		for _, el := range s.Elements {
-			p := strings.Split(el.Path.String(), `\`)[1:]
+			p := strings.Split(el.Path, `\`)[1:]
 			branch := root
 			lastIndex := len(p) - 1
 			for _, s := range p[:lastIndex] {
@@ -82,12 +82,27 @@ func gen(w io.Writer) {
 	}
 	fmt.Fprint(w, "//go:embed ebml.xml\n")
 	fmt.Fprint(w, "var schemaDefinition []byte\n")
+	fmt.Fprint(w, "\nvar (")
 	root.VisitAll(func(node *schema.TreeNode) {
-		write(w, node)
+		writeID(w, node)
+	})
+	fmt.Fprint(w, ")\n")
+	root.VisitAll(func(node *schema.TreeNode) {
+		writeStruct(w, node)
 	})
 }
 
-func write(w io.Writer, node *schema.TreeNode) {
+func writeID(w io.Writer, node *schema.TreeNode) {
+	fmt.Fprintf(w, "\n\tID%s = %q", strings.ReplaceAll(node.El.Name, "-", ""), node.El.ID)
+	if node.El.Type != schema.TypeMaster {
+		return
+	}
+	node.VisitAll(func(n *schema.TreeNode) {
+		writeID(w, n)
+	})
+}
+
+func writeStruct(w io.Writer, node *schema.TreeNode) {
 	if node.El.Type != schema.TypeMaster {
 		return
 	}
@@ -104,13 +119,6 @@ func write(w io.Writer, node *schema.TreeNode) {
 	})
 	fmt.Fprint(w, "\n}\n\n")
 	node.VisitAll(func(n *schema.TreeNode) {
-		write(w, n)
-	})
-}
-
-func writeHeaderDefinition(w io.Writer, node *schema.TreeNode) {
-	fmt.Fprintf(w, "\n\t%s,", node.El.Name)
-	node.VisitAll(func(n *schema.TreeNode) {
-		writeHeaderDefinition(w, n)
+		writeStruct(w, n)
 	})
 }

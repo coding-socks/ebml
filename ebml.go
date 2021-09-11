@@ -11,9 +11,8 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"github.com/coding-socks/ebml/internal/schema"
+	"github.com/coding-socks/ebml/schema"
 	"io"
-	"io/ioutil"
 	"sort"
 	"strings"
 	"sync"
@@ -21,20 +20,69 @@ import (
 
 var (
 	docTypesMu sync.RWMutex
-	docTypes   = make(map[string]schema.Schema)
+	docTypes   = make(map[string]*Def)
 
-	ebmlId  = "0x1A45DFA3"
-	crc32Id = "0xBF"
-	voidId  = "0xEC"
+	headerDocType schema.Schema
+	HeaderDef     *Def
 
-	HeaderDocType schema.Schema
+	DefaultMaxIDLength   uint = 4
+	DefaultMaxSizeLength uint = 8
 )
 
 func init() {
-	err := xml.Unmarshal(schemaDefinition, &HeaderDocType)
+	err := xml.Unmarshal(schemaDefinition, &headerDocType)
 	if err != nil {
 		panic("cannot parse header definition")
 	}
+	HeaderDef, _ = NewDef(headerDocType)
+}
+
+type Def struct {
+	m    map[string]schema.Element
+	Root schema.Element
+}
+
+func NewDef(s schema.Schema) (*Def, error) {
+	def := Def{
+		m: make(map[string]schema.Element, len(s.Elements)),
+	}
+	set := make(map[string]bool, len(s.Elements))
+	for _, el := range s.Elements {
+		set[el.ID] = true
+		def.m[el.ID] = el
+	}
+	var bodyRoots []schema.Element
+	for _, el := range def.m {
+		if strings.Count(el.Path, "\\") == 1 && el.ID != IDVoid {
+			bodyRoots = append(bodyRoots, el)
+		}
+	}
+	if len(bodyRoots) != 1 {
+		return nil, errors.New("ebml: an EBML schema MUST declare exactly one EBML element at root level")
+	}
+	def.Root = bodyRoots[0]
+	for _, el := range headerDocType.Elements {
+		if set[el.ID] {
+			continue
+		}
+		def.m[el.ID] = el
+	}
+	return &def, nil
+}
+
+func (d *Def) Get(id string) (schema.Element, bool) {
+	el, ok := d.m[id]
+	return el, ok
+}
+
+func (d *Def) Values() []schema.Element {
+	els := make([]schema.Element, len(d.m))
+	var i int
+	for s := range d.m {
+		els[i] = d.m[s]
+		i++
+	}
+	return els
 }
 
 // Register makes a schema.Schema available by the provided doc type.
@@ -47,16 +95,11 @@ func Register(docType string, s schema.Schema) {
 	if _, dup := docTypes[docType]; dup {
 		panic("ebml: register called twice for docType " + docType)
 	}
-	set := make(map[string]bool, len(s.Elements))
-	for i := range s.Elements {
-		set[s.Elements[i].ID] = true
+	def, err := NewDef(s)
+	if err != nil {
+		panic(err)
 	}
-	for i := range HeaderDocType.Elements {
-		if !set[HeaderDocType.Elements[i].ID] {
-			s.Elements = append(s.Elements, HeaderDocType.Elements[i])
-		}
-	}
-	docTypes[docType] = s
+	docTypes[docType] = def
 }
 
 // DocTypes returns a sorted list of the names of the registered document types.
@@ -71,12 +114,20 @@ func DocTypes() []string {
 	return list
 }
 
-func definition(docType string) (schema.Schema, error) {
+type UnknownDocTypeError struct {
+	DocType string
+}
+
+func (e UnknownDocTypeError) Error() string {
+	return fmt.Sprintf("ebml: unknown DocType %q (forgotten import?)", e.DocType)
+}
+
+func Definition(docType string) (*Def, error) {
 	docTypesMu.RLock()
 	dt, ok := docTypes[docType]
 	docTypesMu.RUnlock()
 	if !ok {
-		return schema.Schema{}, fmt.Errorf("ebml: unknown docType %q (forgotten import?)", docType)
+		return nil, UnknownDocTypeError{DocType: docType}
 	}
 	return dt, nil
 }
@@ -102,65 +153,114 @@ func (ds *DataSize) Size() int64 {
 }
 
 type Element struct {
-	def schema.Element
-
 	ID       string
 	DataSize DataSize
 }
 
-// A Decoder represents an EBML parser reading a particular input stream.
-type Decoder struct {
-	Header EBML
+// Reader provides a low level API to interacts with EBML documents.
+// Use directly with caution.
+type Reader struct {
+	r io.ReadSeeker
 
 	// https://tools.ietf.org/html/rfc8794#section-11.2.4
-	maxIDLength uint
+	MaxIDLength uint
 	// https://tools.ietf.org/html/rfc8794#section-11.2.5
-	maxSizeLength uint
-
-	r *Reader
-
-	elCache *Element
+	MaxSizeLength uint
 }
 
-// ReadDocument reads and parses an EBML Document from r.
-func ReadDocument(r io.Reader) (*Decoder, error) {
-	d := &Decoder{
-		maxIDLength:   4,
-		maxSizeLength: 8,
+func NewReader(r io.ReadSeeker) *Reader {
+	return &Reader{
+		r: r,
+
+		MaxIDLength:   DefaultMaxIDLength,
+		MaxSizeLength: DefaultMaxSizeLength,
 	}
-	d.switchToReader(r)
-	var err error
-	d.Header, err = d.decodeHeader()
+}
+
+func (r *Reader) Next() (el Element, n int, err error) {
+	el.ID, n, err = ReadElementID(r.r, r.MaxIDLength)
 	if err != nil {
-		return nil, err
+		return Element{}, n, err
 	}
-	d.maxIDLength = d.Header.EBMLMaxIDLength
-	d.maxSizeLength = d.Header.EBMLMaxSizeLength
-	return d, nil
+	var m int
+	el.DataSize, m, err = ReadElementDataSize(r.r, r.MaxSizeLength)
+	n += m
+	if err != nil {
+		return Element{}, n, err
+	}
+	return el, n, nil
 }
 
-type Reader struct {
-	pos int64
-	r   io.Reader
+func (r *Reader) Peek() (Element, error) {
+	el, n, err := r.Next()
+	r.Seek(int64(-n), io.SeekCurrent)
+	return el, err
 }
 
-func (r *Reader) Position() int64 {
-	return r.pos
+func (r *Reader) Read(b []byte) (n int, err error) {
+	return r.r.Read(b)
 }
 
-func (r *Reader) Read(p []byte) (n int, err error) {
-	n, err = r.r.Read(p)
-	r.pos += int64(n)
-	return n, err
+func (r *Reader) Seek(offset int64, whence int) (ret int64, err error) {
+	return r.r.Seek(offset, whence)
 }
 
-func (d *Decoder) switchToReader(r io.Reader) {
-	d.r = &Reader{r: r}
+// A Decoder represents an EBML parser reading a particular input stream.
+type Decoder struct {
+	r   *Reader
+	def *Def
+
+	el *Element
 }
 
-func (d *Decoder) skip(el Element) error {
-	_, err := io.CopyN(ioutil.Discard, d.r, el.DataSize.Size())
-	return err
+// NewDecoder reads and parses an EBML Document from r.
+func NewDecoder(r io.ReadSeeker) *Decoder {
+	return &Decoder{
+		r:   NewReader(r),
+		def: HeaderDef,
+	}
+}
+
+func (d *Decoder) Next() (el Element, n int, err error) {
+	el, i, err := d.r.Next()
+	d.el = &el
+	return el, i, err
+}
+
+func (d *Decoder) Seek(offset int64, whence int) (ret int64, err error) {
+	d.el = nil
+	return d.r.Seek(offset, whence)
+}
+
+// EndOfElement tries to guess the end of an element.
+//
+// Offset is ignored when element has unknown size.
+func (d *Decoder) EndOfElement(el Element, offset int64) (bool, error) {
+	if el.DataSize.Known() {
+		if offset > el.DataSize.Size() {
+			return true, ErrElementOverflow
+		}
+		return offset == el.DataSize.Size(), nil
+	}
+	next, err := d.r.Peek()
+	if err == io.EOF {
+		return true, err
+	}
+	if err != nil { // error can be ignored, probably garbage data
+		return false, nil
+	}
+	if next.ID == IDCRC32 || next.ID == IDVoid { // global elements are child of anything
+		return false, nil
+	}
+	def, ok := d.def.Get(el.ID)
+	if !ok {
+		return false, fmt.Errorf("ebml: element definition not found for %s", el.ID)
+	}
+	nextDef, ok := d.def.Get(next.ID)
+	if !ok {
+		return false, fmt.Errorf("ebml: element definition not found for %s", next.ID)
+	}
+	return !strings.HasPrefix(nextDef.Path, def.Path) || len(nextDef.Path) == len(def.Path), nil
 }
 
 type UnknownElementError struct {
@@ -171,68 +271,34 @@ func (e UnknownElementError) Error() string {
 	return fmt.Sprintf("ebml: unknown element: %s", e.el.ID)
 }
 
-// element returns the next EBML Element in the input stream.
-// At the end of the input stream, element returns nil, io.EOF.
-//
-// Element implements EBML specification as described by
-// https://matroska-org.github.io/libebml/specs.html.
-func (d *Decoder) element(elements []schema.Element) (el Element, err error) {
-	if d.elCache != nil {
-		el = *d.elCache
-		d.elCache = nil
-	} else {
-		el.ID, err = ReadElementID(d.r, d.maxIDLength)
-		if err != nil {
-			return Element{}, err
-		}
-		el.DataSize, err = ReadElementDataSize(d.r, d.maxSizeLength)
-		if err != nil {
-			return Element{}, err
-		}
-	}
-	var (
-		found bool
-		eldef schema.Element
-	)
-	for i := range elements {
-		if elements[i].ID == el.ID {
-			found = true
-			eldef = elements[i]
-			break
-		}
-	}
-	if !found {
-		return Element{}, &UnknownElementError{el: el}
-	}
-	el.def = eldef
-	return el, nil
-}
-
-var errInvalidId = fmt.Errorf("ebml: invalid length descriptor")
+var ErrInvalidVINTLength = fmt.Errorf("ebml: invalid length descriptor")
 
 // ReadElementID reads an Element ID based on
 // https://datatracker.ietf.org/doc/html/rfc8794#section-5
-func ReadElementID(r io.Reader, maxIDLength uint) (string, error) {
+func ReadElementID(r io.Reader, maxIDLength uint) (id string, n int, err error) {
 	b := make([]byte, maxIDLength)
 	// TODO: EBMLMaxIDLength can be greater than 8
 	//   https://tools.ietf.org/html/rfc8794#section-11.2.4
-	if _, err := r.Read(b[:1]); err != nil {
-		return "", err
+	n, err = r.Read(b[:1])
+	if err != nil {
+		return "", n, err
 	}
 	w := vintOctetLength(b)
 	if w > len(b) {
-		return "", errInvalidId
+		return "", 1, ErrInvalidVINTLength
 	}
-	if w != 1 {
-		if _, err := r.Read(b[1:w]); err != nil {
-			return "", err
+	if w > 1 {
+		m, err := r.Read(b[1:w])
+		n += m
+		if err != nil {
+			return "", n, err
 		}
 	}
 	data := vintData(b, w)
 	if vintDataAllOne(data, w) {
-		return "", errors.New("VINT_DATA MUST NOT be set to all 1")
+		return "", n, errors.New("VINT_DATA MUST NOT be set to all 1")
 	}
-	return "0x" + strings.ToUpper(hex.EncodeToString(b[:w])), nil
+	return "0x" + strings.ToUpper(hex.EncodeToString(b[:w])), n, nil
 }
 
 func dataPad(b []byte) []byte {
@@ -243,21 +309,24 @@ func dataPad(b []byte) []byte {
 
 // ReadElementDataSize reads an Element ID based on
 // https://datatracker.ietf.org/doc/html/rfc8794#section-6
-func ReadElementDataSize(r io.Reader, maxSizeLength uint) (DataSize, error) {
+func ReadElementDataSize(r io.Reader, maxSizeLength uint) (ds DataSize, n int, err error) {
 	b := make([]byte, maxSizeLength)
 	// TODO: EBMLMaxSizeLength can be greater than 8
 	//   https://tools.ietf.org/html/rfc8794#section-11.2.5
-	if _, err := r.Read(b[:1]); err != nil {
-		return DataSize{}, err
+	n, err = r.Read(b[:1])
+	if err != nil {
+		return DataSize{}, n, err
 	}
 	w := vintOctetLength(b)
-	if _, err := r.Read(b[1:w]); err != nil {
-		return DataSize{}, err
+	m, err := r.Read(b[1:w])
+	n += m
+	if err != nil {
+		return DataSize{}, n, err
 	}
-	ds := vintData(b, w)
-	if vintDataAllOne(ds, w) {
-		return DataSize{m: unknownDS}, nil
+	d := vintData(b, w)
+	if vintDataAllOne(d, w) {
+		return DataSize{m: unknownDS}, n, nil
 	}
-	i := binary.BigEndian.Uint64(dataPad(ds))
-	return DataSize{s: int64(i)}, nil
+	i := binary.BigEndian.Uint64(dataPad(d))
+	return DataSize{s: int64(i)}, n, nil
 }

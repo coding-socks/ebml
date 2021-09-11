@@ -1,6 +1,6 @@
 # EBML
 
-An EBML parser written in Go.
+A Matroska parser written in Go.
 
 - [Introduction](#introduction)
 - [Production readiness](#production-readiness)
@@ -9,9 +9,9 @@ An EBML parser written in Go.
 
 ## Introduction
 
-> Extensible Binary Meta Language (EBML) is a generalized file format for any kind of data, aiming to be a binary equivalent to XML. It provides a basic framework for storing data in XML-like tags. It was originally developed for the Matroska audio/video container format.
+> The Matroska Multimedia Container is a free and open container format, a file format that can hold an unlimited number of video, audio, picture, or subtitle tracks in one file.
 
-Source: https://en.wikipedia.org/wiki/Extensible_Binary_Meta_Language
+Source: https://en.wikipedia.org/wiki/Matroska
 
 It is based on the July 2020 version of [RFC 8794][rfc8794] (with additions from [github.com/ietf-wg-cellar/ebml-specification][ebml-specification]) and on the 7th iteration of [draft-ietf-cellar-matroska][draft-ietf-cellar-matroska-07]. None of these documents reached ["Internet Standard"](https://tools.ietf.org/html/rfc2026#section-4.1.3) status yet.
 

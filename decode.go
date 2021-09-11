@@ -4,8 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/coding-socks/ebml/internal/ebmlpath"
-	"github.com/coding-socks/ebml/internal/schema"
+	"github.com/coding-socks/ebml/schema"
 	"io"
 	"math"
 	"reflect"
@@ -24,9 +23,9 @@ type DecodeTypeError struct {
 
 func (e *DecodeTypeError) Error() string {
 	if e.Path != "" {
-		return "ebml: cannot unmarshal " + e.EBMLType + " into Go struct field " + e.Path + " of type " + e.Type.String()
+		return fmt.Sprintf("ebml: cannot unmarshal %s into Go struct field %s of type %s", e.EBMLType, e.Path, e.Type)
 	}
-	return "ebml: cannot unmarshal " + e.EBMLType + " into Go value of type " + e.Type.String()
+	return fmt.Sprintf("ebml: cannot unmarshal %s into Go value of type %s", e.EBMLType, e.Type)
 }
 
 func (e *DecodeTypeError) extendError(p string) {
@@ -54,53 +53,77 @@ func (e *InvalidDecodeError) Error() string {
 	return "ebml: Unmarshal(nil " + e.Type.String() + ")"
 }
 
-// decodeHeader decodes the document header.
-func (d *Decoder) decodeHeader() (EBML, error) {
-	var v EBML
-	val := reflect.ValueOf(&v)
+var ErrElementOverflow = errors.New("ebml: element overflow")
 
-	if err := d.decodeRoot(val.Elem(), HeaderDocType, `\EBML`); err != nil {
-		if err == io.EOF {
-			err = io.ErrUnexpectedEOF
+// DecodeHeader decodes the document header.
+func (d *Decoder) DecodeHeader() (*EBML, error) {
+	for {
+		el, _, err := d.Next()
+		if err != nil {
+			return nil, err
 		}
-		return EBML{}, err
+		switch el.ID {
+		default:
+			return nil, fmt.Errorf("ebml: unexpected element %s in root", el.ID)
+		case IDVoid:
+			continue
+		case IDEBML:
+			d.def = HeaderDef
+			d.r.MaxIDLength = DefaultMaxIDLength
+			d.r.MaxSizeLength = DefaultMaxSizeLength
+			var h EBML
+			err := d.Decode(&h)
+			if err != nil {
+				return nil, err
+			}
+			d.def, err = Definition(h.DocType)
+			if err != nil {
+				return nil, err
+			}
+			d.r.MaxIDLength = h.EBMLMaxIDLength
+			d.r.MaxSizeLength = h.EBMLMaxSizeLength
+			return &h, err
+		}
 	}
-	return v, nil
 }
 
 // DecodeBody decodes the EBML Body and stores the result in the value
 // pointed to by v. If v is nil or not a pointer, DecodeBody returns
 // an InvalidDecodeError.
 func (d *Decoder) DecodeBody(v interface{}) error {
+	for {
+		el, _, err := d.Next()
+		if err != nil {
+			return err
+		}
+		switch el.ID {
+		default:
+			return fmt.Errorf("ebml: unexpected element %s in root", el.ID)
+		case IDVoid:
+			continue
+		case d.def.Root.ID:
+			return d.Decode(v)
+		}
+	}
+}
+
+func (d *Decoder) Decode(v interface{}) error {
 	val := reflect.ValueOf(v)
 	if val.Kind() != reflect.Ptr || val.IsNil() {
 		return &InvalidDecodeError{reflect.TypeOf(v)}
 	}
-	bodyDef, err := definition(d.Header.DocType)
-	if err != nil {
-		return err
+	if d.el == nil {
+		return fmt.Errorf("ebml: missing decoded element (forgotten call Next?)")
 	}
-	root := bodyDef.QueryChildren("")
-	var bodyRoots []schema.Element
-	for _, el := range root {
-		if el.ID != voidId && el.ID != ebmlId {
-			bodyRoots = append(bodyRoots, el)
-		}
-	}
-	if len(bodyRoots) != 1 {
-		panic("ebml: an EBML schema MUST declare exactly one EBML element at root level")
-	}
-	if err := d.decodeRoot(val.Elem(), bodyDef, ebmlpath.Join("", bodyRoots[0].Name)); err != nil {
-		if err == io.EOF {
-			err = nil
-		}
-		return err
-	}
-	return nil
+	err := d.decodeSingle(*d.el, val.Elem())
+	d.el = nil
+	return err
 }
 
 var (
-	timeType        = reflect.TypeOf(time.Time{})
+	typeTime     = reflect.TypeOf(time.Time{})
+	typeDuration = reflect.TypeOf(time.Duration(0))
+
 	thirdMillennium = time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
 )
 
@@ -117,49 +140,7 @@ func findField(val reflect.Value, tinfo *typeInfo, name string) (fieldv reflect.
 	return
 }
 
-func (d *Decoder) decodeRoot(val reflect.Value, s schema.Schema, path string) error {
-	// Load value from interface, but only if the result will be
-	// usefully addressable.
-	if val.Kind() == reflect.Interface && !val.IsNil() {
-		e := val.Elem()
-		if e.Kind() == reflect.Ptr && !e.IsNil() {
-			val = e
-		}
-	}
-
-	if val.Kind() == reflect.Ptr {
-		if val.IsNil() {
-			val.Set(reflect.New(val.Type().Elem()))
-		}
-		val = val.Elem()
-	}
-
-	eldef, ok := s.Query(path)
-	if !ok {
-		return fmt.Errorf("ebml: unexpected element path %s", path)
-	}
-	el, err := d.element([]schema.Element{eldef})
-	if err != nil {
-		return err
-	}
-	if el.ID == crc32Id {
-		return errors.New("ebml: unexpected crc-32 element")
-	}
-	if el.ID == voidId {
-		// TODO: skip void elements
-		return errors.New("ebml: unexpected void element")
-	}
-	if val.Kind() != reflect.Struct {
-		return errors.New("ebml: unknown root element type: " + val.Type().String())
-	}
-
-	if err := d.decodeSingle(el, val, s, path); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (d *Decoder) decodeMaster(val reflect.Value, ds DataSize, s schema.Schema, path string) error {
+func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 	// Load value from interface, but only if the result will be
 	// usefully addressable.
 	if val.Kind() == reflect.Interface && !val.IsNil() {
@@ -194,42 +175,44 @@ func (d *Decoder) decodeMaster(val reflect.Value, ds DataSize, s schema.Schema, 
 		return err
 	}
 
-	occurrences := make(map[string]int, len(s.Elements))
-	start := d.r.Position()
-	children := s.QueryChildren(path)
+	occurrences := make(map[string]int)
+	var offset int64
 	for {
-		// Check size first because it can be 0
-		if ds.Known() {
-			offset := d.r.Position() - start
-			if offset > ds.Size() {
-				return errors.New("ebml: element overflow")
-			} else if offset == ds.Size() {
-				break
-			}
+		// Check end of element first because data size can be 0
+		if end, err := d.EndOfElement(current, offset); err != nil {
+			return err
+		} else if end {
+			break
 		}
 
-		el, err := d.element(children)
+		el, n, err := d.r.Next()
+		if current.DataSize.Known() {
+			offset += int64(n)
+		}
 		if err != nil {
-			if err == errInvalidId {
+			if err == ErrInvalidVINTLength {
 				continue
 			}
 			var e *UnknownElementError
-			if !ds.Known() && errors.As(err, &e) {
-				d.elCache = &e.el
+			if !current.DataSize.Known() && errors.As(err, &e) {
 				break
 			}
 			return err
 		}
+		if current.DataSize.Known() {
+			offset += el.DataSize.Size()
+		}
+		def, _ := d.def.Get(el.ID)
 		occurrences[el.ID]++
-		fieldv, found := findField(val, tinfo, el.def.Name)
+		fieldv, found := findField(val, tinfo, def.Name)
 		if !found {
 			if el.DataSize.Known() {
-				if err := d.skip(el); err != nil {
+				if _, err := d.Seek(el.DataSize.Size(), io.SeekCurrent); err != nil {
 					return fmt.Errorf("ebml: was not able to skip element: %w", err)
 				}
 				continue
-			} else if el.def.Type == TypeMaster {
-				if err := d.decodeMaster(val, el.DataSize, s, ebmlpath.Join(path, el.def.Name)); err != nil {
+			} else if def.Type == TypeMaster {
+				if err := d.decodeMaster(val, el); err != nil {
 					return err
 				}
 				continue
@@ -238,7 +221,7 @@ func (d *Decoder) decodeMaster(val reflect.Value, ds DataSize, s schema.Schema, 
 			}
 		}
 
-		if err := d.decodeSingle(el, fieldv, s, ebmlpath.Join(path, el.def.Name)); err != nil {
+		if err := d.decodeSingle(el, fieldv); err != nil {
 			if e, ok := err.(*DecodeTypeError); ok {
 				e.extendError(val.Type().Name())
 			}
@@ -246,8 +229,9 @@ func (d *Decoder) decodeMaster(val reflect.Value, ds DataSize, s schema.Schema, 
 		}
 	}
 
-	for i := range s.Elements {
-		sel := s.Elements[i]
+	elements := d.def.Values()
+	for i := range elements {
+		sel := elements[i]
 		if sel.Default == nil || occurrences[sel.ID] > 0 {
 			continue
 		}
@@ -268,7 +252,7 @@ func (d *Decoder) decodeMaster(val reflect.Value, ds DataSize, s schema.Schema, 
 			}
 		}
 
-		if err := validateReflectType(fieldv, sel, d.r.Position()); err != nil {
+		if err := validateReflectType(fieldv, sel, 0); err != nil {
 			if e, ok := err.(*DecodeTypeError); ok {
 				e.extendError(sel.Name)
 				e.extendError(val.Type().Name())
@@ -280,8 +264,13 @@ func (d *Decoder) decodeMaster(val reflect.Value, ds DataSize, s schema.Schema, 
 			x, _ := strconv.ParseInt(*sel.Default, 10, 64)
 			fieldv.SetInt(x)
 		case TypeUinteger:
-			x, _ := strconv.ParseUint(*sel.Default, 10, 64)
-			fieldv.SetUint(x)
+			if fieldv.Type() == typeDuration {
+				x, _ := strconv.ParseInt(*sel.Default, 10, 64)
+				fieldv.SetInt(x)
+			} else {
+				x, _ := strconv.ParseUint(*sel.Default, 10, 64)
+				fieldv.SetUint(x)
+			}
 		case TypeFloat:
 			x, _ := strconv.ParseFloat(*sel.Default, 64)
 			fieldv.SetFloat(x)
@@ -322,7 +311,7 @@ func validateReflectType(v reflect.Value, def schema.Element, position int64) er
 		switch v.Type() {
 		default:
 			return &DecodeTypeError{EBMLType: def.Type, Type: v.Type(), Offset: position}
-		case timeType:
+		case typeTime:
 			// valid type
 		}
 
@@ -345,7 +334,12 @@ func validateReflectType(v reflect.Value, def schema.Element, position int64) er
 	case TypeUinteger:
 		switch v.Kind() {
 		default:
-			return &DecodeTypeError{EBMLType: def.Type, Type: v.Type(), Offset: position}
+			switch v.Type() {
+			default:
+				return &DecodeTypeError{EBMLType: def.Type, Type: v.Type(), Offset: position}
+			case typeDuration:
+				// valid type
+			}
 		case reflect.Uint, reflect.Uint64, reflect.Uint32:
 			// valid type
 		}
@@ -358,25 +352,26 @@ func validateReflectType(v reflect.Value, def schema.Element, position int64) er
 	return nil
 }
 
-func (d *Decoder) decodeSingle(el Element, val reflect.Value, s schema.Schema, path string) error {
+func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
+	def, _ := d.def.Get(el.ID)
 	if v := val; v.Kind() == reflect.Slice {
 		e := v.Type().Elem()
-		if !(el.def.Type == TypeBinary && e.Kind() == reflect.Uint8) {
+		if !(def.Type == TypeBinary && e.Kind() == reflect.Uint8) {
 			n := v.Len()
 			v.Set(reflect.Append(v, reflect.Zero(e)))
 			val = v.Index(n)
 		}
 	}
-	if err := validateReflectType(val, el.def, d.r.Position()); err != nil {
+	if err := validateReflectType(val, def, 0); err != nil {
 		if e, ok := err.(*DecodeTypeError); ok {
-			e.extendError(el.def.Name)
+			e.extendError(def.Name)
 		}
 		return err
 	}
 
-	switch el.def.Type {
+	switch def.Type {
 	case TypeMaster:
-		if err := d.decodeMaster(val, el.DataSize, s, path); err != nil {
+		if err := d.decodeMaster(val, el); err != nil {
 			return err
 		}
 
@@ -409,11 +404,20 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value, s schema.Schema, p
 		val.SetInt(i)
 
 	case TypeUinteger:
-		i, err := d.readUint(el.DataSize.Size())
-		if err != nil {
-			return err
+		switch val.Type() {
+		default:
+			i, err := d.readUint(el.DataSize.Size())
+			if err != nil {
+				return err
+			}
+			val.SetUint(i)
+		case typeDuration:
+			i, err := d.readInt(el.DataSize.Size())
+			if err != nil {
+				return err
+			}
+			val.SetInt(i)
 		}
-		val.SetUint(i)
 
 	case TypeString, TypeUTF8:
 		str, err := d.readString(el.DataSize.Size())

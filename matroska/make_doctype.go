@@ -1,3 +1,4 @@
+//go:build codegen
 // +build codegen
 
 // This program generates doctype.go.
@@ -8,7 +9,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
-	"github.com/coding-socks/ebml/internal/schema"
+	"github.com/coding-socks/ebml/schema"
 	"golang.org/x/tools/imports"
 	"io"
 	"io/ioutil"
@@ -61,13 +62,13 @@ func gen(w io.Writer) {
 			}
 		}()
 		for _, el := range s.Elements {
-			if el.Path.String() == `\(-\)Void` || el.Path.String() == `\(1-\)CRC-32` {
+			if el.Path == `\(-\)Void` || el.Path == `\(1-\)CRC-32` {
 				continue
 			}
-			if strings.HasPrefix(el.Path.String(), `\EBML`) {
+			if strings.HasPrefix(el.Path, `\EBML`) {
 				continue
 			}
-			p := strings.Split(el.Path.String(), `\`)[1:]
+			p := strings.Split(el.Path, `\`)[1:]
 			branch := root
 			lastIndex := len(p) - 1
 			for _, s := range p[:lastIndex] {
@@ -82,13 +83,28 @@ func gen(w io.Writer) {
 		}
 	}
 	fmt.Fprint(w, "//go:embed ebml_matroska.xml\n")
-	fmt.Fprint(w, "var DocType []byte\n")
+	fmt.Fprint(w, "var docType []byte\n")
 	root.VisitAll(func(node *schema.TreeNode) {
-		write(w, node)
+		fmt.Fprint(w, "\nvar (")
+		writeID(w, node)
+		fmt.Fprint(w, ")\n")
+	})
+	root.VisitAll(func(node *schema.TreeNode) {
+		writeStruct(w, node)
 	})
 }
 
-func write(w io.Writer, node *schema.TreeNode) {
+func writeID(w io.Writer, node *schema.TreeNode) {
+	fmt.Fprintf(w, "\n\tID%s = %q", node.El.Name, node.El.ID)
+	if node.El.Type != schema.TypeMaster {
+		return
+	}
+	node.VisitAll(func(n *schema.TreeNode) {
+		writeID(w, n)
+	})
+}
+
+func writeStruct(w io.Writer, node *schema.TreeNode) {
 	if node.El.Type != schema.TypeMaster {
 		return
 	}
@@ -101,10 +117,18 @@ func write(w io.Writer, node *schema.TreeNode) {
 			fmt.Fprintf(w, "\n\t%s []%s", n.El.Name, schema.ResolveGoType(n.El.Type, n.El.Name))
 			return
 		}
+		// if !n.El.MaxOccurs.Unbounded() && n.El.MinOccurs == 0 && n.El.MaxOccurs.Val() == 1 {
+		// 	fmt.Fprintf(w, "\n\t%s *%s", n.El.Name, schema.ResolveGoType(n.El.Type, n.El.Name))
+		// 	return
+		// }
+		if n.El.ID == "0xE7" || n.El.ID == "0x2AD7B1" { // \Segment\Cluster\Timestamp, \Segment\Info\TimestampScale
+			fmt.Fprintf(w, "\n\t%s time.Duration", n.El.Name)
+			return
+		}
 		fmt.Fprintf(w, "\n\t%s %s", n.El.Name, schema.ResolveGoType(n.El.Type, n.El.Name))
 	})
 	fmt.Fprint(w, "\n}\n\n")
 	node.VisitAll(func(n *schema.TreeNode) {
-		write(w, n)
+		writeStruct(w, n)
 	})
 }
