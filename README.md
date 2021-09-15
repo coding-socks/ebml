@@ -13,18 +13,15 @@ An EBML parser written in Go.
 
 Source: https://en.wikipedia.org/wiki/Extensible_Binary_Meta_Language
 
-It is based on the July 2020 version of [RFC 8794][rfc8794] (with additions from [github.com/ietf-wg-cellar/ebml-specification][ebml-specification]) and on the 7th iteration of [draft-ietf-cellar-matroska][draft-ietf-cellar-matroska-07]. None of these documents reached ["Internet Standard"](https://tools.ietf.org/html/rfc2026#section-4.1.3) status yet.
+This library is based on the July 2020 version of [RFC 8794][rfc8794] (with additions from [github.com/ietf-wg-cellar/ebml-specification][ebml-specification]). This document did not reach ["Internet Standard"](https://tools.ietf.org/html/rfc2026#section-4.1.3) status yet. RFC 8794 is in a ["Proposed Standard"](https://tools.ietf.org/html/rfc2026#section-4.1.1) status.
 
-- RFC 8794 is in a ["Proposed Standard"](https://tools.ietf.org/html/rfc2026#section-4.1.1) status.
-- draft-ietf-cellar-matroska is still an [Internet-Draft](https://tools.ietf.org/html/rfc2026#section-2.2).
-
-The goal is to provide implementation for these documents and during the implementation provide feedback for them.
+The goal of this project is to create an implementation based on the document and during the implementation provide feedback.
 
 ## Production readiness
 
 **This project is still in alpha phase.** In this stage the public API can change between days.
 
-Beta version will be considered when the feature set covers most of the documents the implementation is based on, and the public API is reached a mature state.
+Beta version will be considered when the feature set covers the documents the implementation is based on, and the public API is reached a mature state.
 
 Stable version will be considered only if enough positive feedback is gathered to lock the public API and all document the implementation is based on became ["Internet Standard"](https://tools.ietf.org/html/rfc2026#section-4.1.3).
 
@@ -44,7 +41,6 @@ Huge thanks to the [Matroska.org](https://www.matroska.org/) for their work.
 ### IETF Documents
 
 - [RFC 8794: Extensible Binary Meta Language][rfc8794]
-- [draft-ietf-cellar-matroska-07: Matroska Media Container Format Specifications][draft-ietf-cellar-matroska-07]
 
 Huge thanks to the [IETF CELLAR Working Group](https://datatracker.ietf.org/wg/cellar/charter/) for their work.
 
@@ -77,5 +73,4 @@ Last updated: 2020-02-18
 | https://github.com/tpjg/ebml-go | Last updated on 1 Dec 2012 |
 
 [rfc8794]: https://tools.ietf.org/html/rfc8794
-[draft-ietf-cellar-matroska-07]: https://www.ietf.org/archive/id/draft-ietf-cellar-matroska-07.html
 [ebml-specification]: https://github.com/ietf-wg-cellar/ebml-specification
