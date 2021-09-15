@@ -243,6 +243,12 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 		if !found {
 			continue
 		}
+		if fieldv.Kind() == reflect.Ptr {
+			if fieldv.IsNil() {
+				fieldv.Set(reflect.New(fieldv.Type().Elem()))
+			}
+			fieldv = fieldv.Elem()
+		}
 		if v := fieldv; v.Kind() == reflect.Slice {
 			e := v.Type().Elem()
 			if !(sel.Type == TypeBinary && e.Kind() == reflect.Uint8) {
@@ -354,6 +360,12 @@ func validateReflectType(v reflect.Value, def schema.Element, position int64) er
 
 func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 	def, _ := d.def.Get(el.ID)
+	if val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			val.Set(reflect.New(val.Type().Elem()))
+		}
+		val = val.Elem()
+	}
 	if v := val; v.Kind() == reflect.Slice {
 		e := v.Type().Elem()
 		if !(def.Type == TypeBinary && e.Kind() == reflect.Uint8) {
