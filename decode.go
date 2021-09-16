@@ -66,6 +66,9 @@ func (d *Decoder) DecodeHeader() (*EBML, error) {
 		default:
 			return nil, fmt.Errorf("ebml: unexpected element %s in root", el.ID)
 		case IDVoid:
+			if _, err := d.Seek(el.DataSize.Size(), io.SeekCurrent); err != nil {
+				return nil, fmt.Errorf("ebml: could not skip Void element: %w", err)
+			}
 			continue
 		case IDEBML:
 			d.def = HeaderDef
@@ -100,6 +103,9 @@ func (d *Decoder) DecodeBody(v interface{}) error {
 		default:
 			return fmt.Errorf("ebml: unexpected element %s in root", el.ID)
 		case IDVoid:
+			if _, err := d.Seek(el.DataSize.Size(), io.SeekCurrent); err != nil {
+				return fmt.Errorf("ebml: could not skip Void element: %w", err)
+			}
 			continue
 		case d.def.Root.ID:
 			return d.Decode(v)
