@@ -133,8 +133,8 @@ func Definition(docType string) (*Def, error) {
 }
 
 const (
-	knownDS dsMode = iota
-	unknownDS
+	unknownDS dsMode = iota
+	knownDS
 )
 
 type dsMode int
@@ -325,8 +325,8 @@ func ReadElementDataSize(r io.Reader, maxSizeLength uint) (ds DataSize, n int, e
 	}
 	d := vintData(b, w)
 	if vintDataAllOne(d, w) {
-		return DataSize{m: unknownDS}, n, nil
+		return DataSize{}, n, nil
 	}
 	i := binary.BigEndian.Uint64(dataPad(d))
-	return DataSize{s: int64(i)}, n, nil
+	return DataSize{m: knownDS, s: int64(i)}, n, nil
 }
