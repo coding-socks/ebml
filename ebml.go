@@ -196,12 +196,6 @@ func (r *Reader) Next() (el Element, n int, err error) {
 	return el, n, nil
 }
 
-func (r *Reader) Peek() (Element, error) {
-	el, n, err := r.Next()
-	r.Seek(int64(-n), io.SeekCurrent)
-	return el, err
-}
-
 func (r *Reader) Read(p []byte) (n int, err error) {
 	n, err = r.r.ReadAt(p, r.off)
 	r.off += int64(n)
@@ -280,30 +274,23 @@ func (u UnknownDefinitionError) Error() string {
 // EndOfElement tries to guess the end of an element.
 //
 // Offset is ignored when element has unknown size.
-func (d *Decoder) EndOfElement(el Element, offset int64) (bool, error) {
-	if el.DataSize.Known() {
-		if offset > el.DataSize.Size() {
+func (d *Decoder) EndOfElement(parent Element, el Element, offset int64) (bool, error) {
+	if parent.DataSize.Known() {
+		if offset > parent.DataSize.Size() {
 			return true, ErrElementOverflow
 		}
-		return offset == el.DataSize.Size(), nil
+		return offset == parent.DataSize.Size(), nil
 	}
-	next, err := d.r.Peek()
-	if err == io.EOF {
-		return true, err
-	}
-	if err != nil { // error can be ignored, probably garbage data
+	if el.ID == IDCRC32 || el.ID == IDVoid { // global elements are child of anything
 		return false, nil
 	}
-	if next.ID == IDCRC32 || next.ID == IDVoid { // global elements are child of anything
-		return false, nil
+	def, ok := d.def.Get(parent.ID)
+	if !ok {
+		return false, &UnknownDefinitionError{parent.ID}
 	}
-	def, ok := d.def.Get(el.ID)
+	nextDef, ok := d.def.Get(el.ID)
 	if !ok {
 		return false, &UnknownDefinitionError{el.ID}
-	}
-	nextDef, ok := d.def.Get(next.ID)
-	if !ok {
-		return false, &UnknownDefinitionError{next.ID}
 	}
 	return !strings.HasPrefix(nextDef.Path, def.Path) || len(nextDef.Path) == len(def.Path), nil
 }
