@@ -48,6 +48,9 @@ func NewDef(s schema.Schema) (*Def, error) {
 	}
 	set := make(map[string]bool, len(s.Elements))
 	for _, el := range s.Elements {
+		if el.Type == TypeMaster && el.Default != nil {
+			return nil, fmt.Errorf("ebml: master Element %s MUST NOT declare a default value.", el.ID)
+		}
 		set[el.ID] = true
 		def.m[el.ID] = el
 	}

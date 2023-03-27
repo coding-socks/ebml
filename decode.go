@@ -241,10 +241,6 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 		if sel.Default == nil || occurrences[sel.ID] > 0 {
 			continue
 		}
-		if sel.Type == TypeMaster {
-			// TODO: catch this when Doc Type is registered.
-			panic("ebml: master Elements MUST NOT declare a default value.")
-		}
 		fieldv, found := findField(val, tinfo, sel.Name)
 		if !found {
 			continue
