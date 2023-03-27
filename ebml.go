@@ -160,7 +160,9 @@ type Element struct {
 // Reader provides a low level API to interacts with EBML documents.
 // Use directly with caution.
 type Reader struct {
-	r io.ReadSeeker
+	r    io.ReaderAt
+	base int64
+	off  int64
 
 	// https://tools.ietf.org/html/rfc8794#section-11.2.4
 	MaxIDLength uint
@@ -168,7 +170,7 @@ type Reader struct {
 	MaxSizeLength uint
 }
 
-func NewReader(r io.ReadSeeker) *Reader {
+func NewReader(r io.ReaderAt) *Reader {
 	return &Reader{
 		r: r,
 
@@ -178,12 +180,12 @@ func NewReader(r io.ReadSeeker) *Reader {
 }
 
 func (r *Reader) Next() (el Element, n int, err error) {
-	el.ID, n, err = ReadElementID(r.r, r.MaxIDLength)
+	el.ID, n, err = ReadElementID(r, r.MaxIDLength)
 	if err != nil {
 		return Element{}, n, err
 	}
 	var m int
-	el.DataSize, m, err = ReadElementDataSize(r.r, r.MaxSizeLength)
+	el.DataSize, m, err = ReadElementDataSize(r, r.MaxSizeLength)
 	n += m
 	if err != nil {
 		return Element{}, n, err
@@ -197,12 +199,40 @@ func (r *Reader) Peek() (Element, error) {
 	return el, err
 }
 
-func (r *Reader) Read(b []byte) (n int, err error) {
-	return r.r.Read(b)
+func (r *Reader) Read(p []byte) (n int, err error) {
+	n, err = r.r.ReadAt(p, r.off)
+	r.off += int64(n)
+	return
 }
 
+var errWhence = errors.New("Seek: invalid whence")
+var errOffset = errors.New("Seek: invalid offset")
+
 func (r *Reader) Seek(offset int64, whence int) (ret int64, err error) {
-	return r.r.Seek(offset, whence)
+	switch whence {
+	default:
+		return 0, errWhence
+	case io.SeekStart:
+		offset += r.base
+	case io.SeekCurrent:
+		offset += r.off
+	case io.SeekEnd:
+		// TODO: not sure how to handle this
+		panic("ebml: not able to seek relative to the end")
+	}
+	if offset < r.base {
+		return 0, errOffset
+	}
+	r.off = offset
+	return offset - r.base, nil
+}
+
+func (r *Reader) ReadAt(p []byte, off int64) (n int, err error) {
+	if off < 0 {
+		return 0, io.EOF
+	}
+	off += r.base
+	return r.r.ReadAt(p, off)
 }
 
 // A Decoder represents an EBML parser reading a particular input stream.
@@ -214,7 +244,7 @@ type Decoder struct {
 }
 
 // NewDecoder reads and parses an EBML Document from r.
-func NewDecoder(r io.ReadSeeker) *Decoder {
+func NewDecoder(r io.ReaderAt) *Decoder {
 	return &Decoder{
 		r:   NewReader(r),
 		def: HeaderDef,
@@ -230,6 +260,18 @@ func (d *Decoder) Next() (el Element, n int, err error) {
 func (d *Decoder) Seek(offset int64, whence int) (ret int64, err error) {
 	d.el = nil
 	return d.r.Seek(offset, whence)
+}
+
+type UnknownDefinitionError struct {
+	id string
+}
+
+func (u UnknownDefinitionError) ID() string {
+	return u.id
+}
+
+func (u UnknownDefinitionError) Error() string {
+	return fmt.Sprintf("ebml: element definition not found for %s", u.id)
 }
 
 // EndOfElement tries to guess the end of an element.
@@ -254,11 +296,11 @@ func (d *Decoder) EndOfElement(el Element, offset int64) (bool, error) {
 	}
 	def, ok := d.def.Get(el.ID)
 	if !ok {
-		return false, fmt.Errorf("ebml: element definition not found for %s", el.ID)
+		return false, &UnknownDefinitionError{el.ID}
 	}
 	nextDef, ok := d.def.Get(next.ID)
 	if !ok {
-		return false, fmt.Errorf("ebml: element definition not found for %s", next.ID)
+		return false, &UnknownDefinitionError{next.ID}
 	}
 	return !strings.HasPrefix(nextDef.Path, def.Path) || len(nextDef.Path) == len(def.Path), nil
 }
