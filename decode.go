@@ -184,13 +184,16 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 	occurrences := make(map[string]int)
 	var offset int64
 	for {
-		el, n, err := d.r.Next()
+		el, n, err := d.NextOf(current, offset)
+		if current.DataSize.Known() {
+			offset += int64(n) // Skip garbage eg. ErrInvalidVINTLength.
+		}
 		if err != nil {
 			if err == ErrInvalidVINTLength {
 				continue
 			}
 			if err == io.EOF {
-				return err
+				break
 			}
 			var e *UnknownElementError
 			if !current.DataSize.Known() && errors.As(err, &e) {
@@ -198,14 +201,8 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 			}
 			return err
 		}
-		if end, err := d.EndOfElement(current, el, offset); err != nil {
-			return err
-		} else if end {
-			d.r.Seek(int64(-n), io.SeekCurrent)
-			break
-		}
 		if current.DataSize.Known() {
-			offset += int64(n) + el.DataSize.Size()
+			offset += el.DataSize.Size()
 		}
 		def, _ := d.def.Get(el.ID)
 		occurrences[el.ID]++

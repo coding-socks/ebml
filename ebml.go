@@ -254,6 +254,25 @@ func (d *Decoder) Next() (el Element, n int, err error) {
 	return el, i, err
 }
 
+func (d *Decoder) NextOf(parent Element, offset int64) (el Element, n int, err error) {
+	if end, err := d.EndOfKnownDataSize(parent, offset); err != nil {
+		return Element{}, 0, err
+	} else if end {
+		return Element{}, 0, io.EOF
+	}
+	el, i, err := d.Next()
+	if err != nil {
+		return el, i, err
+	}
+	if end, err := d.EndOfUnknownDataSize(parent, el); err != nil {
+		return Element{}, 0, err
+	} else if end {
+		d.r.Seek(int64(-i), io.SeekCurrent)
+		return Element{}, 0, io.EOF
+	}
+	return el, i, err
+}
+
 func (d *Decoder) Seek(offset int64, whence int) (ret int64, err error) {
 	d.el = nil
 	return d.r.Seek(offset, whence)
@@ -271,15 +290,25 @@ func (u UnknownDefinitionError) Error() string {
 	return fmt.Sprintf("ebml: element definition not found for %s", u.id)
 }
 
-// EndOfElement tries to guess the end of an element.
+// EndOfKnownDataSize tries to guess the end of an element which has a know data size.
 //
-// Offset is ignored when element has unknown size.
-func (d *Decoder) EndOfElement(parent Element, el Element, offset int64) (bool, error) {
+// A parent with unknown data size won't raise an error but never handled as the end of the parent.
+func (d *Decoder) EndOfKnownDataSize(parent Element, offset int64) (bool, error) {
+	if !parent.DataSize.Known() {
+		return false, nil
+	}
+	if offset > parent.DataSize.Size() {
+		return true, ErrElementOverflow
+	}
+	return offset == parent.DataSize.Size(), nil
+}
+
+// EndOfUnknownDataSize tries to guess the end of an element which has an unknown data size.
+//
+// A parent with known data size won't raise an error but never handled as the end of the parent.
+func (d *Decoder) EndOfUnknownDataSize(parent Element, el Element) (bool, error) {
 	if parent.DataSize.Known() {
-		if offset > parent.DataSize.Size() {
-			return true, ErrElementOverflow
-		}
-		return offset == parent.DataSize.Size(), nil
+		return false, nil
 	}
 	if el.ID == IDCRC32 || el.ID == IDVoid { // global elements are child of anything
 		return false, nil
