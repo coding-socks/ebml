@@ -182,6 +182,7 @@ func NewReader(r io.ReaderAt) *Reader {
 	}
 }
 
+// Next reads the following element id and data size.
 func (r *Reader) Next() (el Element, n int, err error) {
 	el.ID, n, err = ReadElementID(r, r.MaxIDLength)
 	if err != nil {
@@ -248,29 +249,36 @@ func NewDecoder(r io.ReaderAt) *Decoder {
 	}
 }
 
+// Next reads the following element id and data size.
+// It must be called before Decode.
 func (d *Decoder) Next() (el Element, n int, err error) {
 	el, i, err := d.r.Next()
 	d.el = &el
 	return el, i, err
 }
 
+// NextOf reads the following element id and data size
+// related to the given parent Element.
+//
+// When NextOf encounters an error or end-of-element condition it
+// return EOE error.
 func (d *Decoder) NextOf(parent Element, offset int64) (el Element, n int, err error) {
 	if end, err := d.EndOfKnownDataSize(parent, offset); err != nil {
 		return Element{}, 0, err
 	} else if end {
 		return Element{}, 0, io.EOF
 	}
-	el, i, err := d.Next()
+	el, n, err = d.Next()
 	if err != nil {
-		return el, i, err
+		return Element{}, n, err
 	}
 	if end, err := d.EndOfUnknownDataSize(parent, el); err != nil {
-		return Element{}, 0, err
+		return Element{}, n, err
 	} else if end {
-		d.r.Seek(int64(-i), io.SeekCurrent)
+		d.r.Seek(int64(-n), io.SeekCurrent)
 		return Element{}, 0, io.EOF
 	}
-	return el, i, err
+	return el, n, nil
 }
 
 func (d *Decoder) Seek(offset int64, whence int) (ret int64, err error) {
