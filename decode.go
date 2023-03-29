@@ -231,6 +231,10 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 		}
 	}
 
+	if current.DataSize.Known() && offset < current.DataSize.Size() {
+		return io.ErrUnexpectedEOF
+	}
+
 	elements := d.def.Values()
 	for i := range elements {
 		sel := elements[i]
