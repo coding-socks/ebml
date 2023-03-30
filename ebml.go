@@ -282,7 +282,9 @@ func (d *Decoder) NextOf(parent Element, offset int64) (el Element, n int, err e
 }
 
 func (d *Decoder) Seek(offset int64, whence int) (ret int64, err error) {
-	d.el = nil
+	if offset != 0 && whence != io.SeekCurrent {
+		d.el = nil
+	}
 	return d.r.Seek(offset, whence)
 }
 
