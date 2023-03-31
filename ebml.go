@@ -167,9 +167,7 @@ type Element struct {
 // Reader provides a low level API to interacts with EBML documents.
 // Use directly with caution.
 type Reader struct {
-	r    io.ReaderAt
-	base int64
-	off  int64
+	r io.ReadSeeker
 
 	// https://tools.ietf.org/html/rfc8794#section-11.2.4
 	MaxIDLength uint
@@ -177,7 +175,7 @@ type Reader struct {
 	MaxSizeLength uint
 }
 
-func NewReader(r io.ReaderAt) *Reader {
+func NewReader(r io.ReadSeeker) *Reader {
 	return &Reader{
 		r: r,
 
@@ -201,40 +199,12 @@ func (r *Reader) Next() (el Element, n int, err error) {
 	return el, n, nil
 }
 
-func (r *Reader) Read(p []byte) (n int, err error) {
-	n, err = r.r.ReadAt(p, r.off)
-	r.off += int64(n)
-	return
+func (r *Reader) Read(b []byte) (n int, err error) {
+	return r.r.Read(b)
 }
-
-var errWhence = errors.New("Seek: invalid whence")
-var errOffset = errors.New("Seek: invalid offset")
 
 func (r *Reader) Seek(offset int64, whence int) (ret int64, err error) {
-	switch whence {
-	default:
-		return 0, errWhence
-	case io.SeekStart:
-		offset += r.base
-	case io.SeekCurrent:
-		offset += r.off
-	case io.SeekEnd:
-		// TODO: not sure how to handle this
-		panic("ebml: not able to seek relative to the end")
-	}
-	if offset < r.base {
-		return 0, errOffset
-	}
-	r.off = offset
-	return offset - r.base, nil
-}
-
-func (r *Reader) ReadAt(p []byte, off int64) (n int, err error) {
-	if off < 0 {
-		return 0, io.EOF
-	}
-	off += r.base
-	return r.r.ReadAt(p, off)
+	return r.r.Seek(offset, whence)
 }
 
 // A Decoder represents an EBML parser reading a particular input stream.
@@ -248,7 +218,7 @@ type Decoder struct {
 }
 
 // NewDecoder reads and parses an EBML Document from r.
-func NewDecoder(r io.ReaderAt) *Decoder {
+func NewDecoder(r io.ReadSeeker) *Decoder {
 	return &Decoder{
 		r:   NewReader(r),
 		def: HeaderDef,
