@@ -147,6 +147,10 @@ type DataSize struct {
 	s int64
 }
 
+func NewKnownDataSize(s int64) DataSize {
+	return DataSize{m: knownDS, s: s}
+}
+
 func (ds *DataSize) Known() bool {
 	return ds.m == knownDS
 }
@@ -239,6 +243,8 @@ type Decoder struct {
 	def *Def
 
 	el *Element
+	// elOverflow signals to return ErrElementOverflow at the end of decode.
+	elOverflow bool
 }
 
 // NewDecoder reads and parses an EBML Document from r.
@@ -302,7 +308,7 @@ func (u UnknownDefinitionError) Error() string {
 
 // EndOfKnownDataSize tries to guess the end of an element which has a know data size.
 //
-// A parent with unknown data size won't raise an error but never handled as the end of the parent.
+// A parent with unknown data size won't raise an error but not handled as the end of the parent.
 func (d *Decoder) EndOfKnownDataSize(parent Element, offset int64) (bool, error) {
 	if !parent.DataSize.Known() {
 		return false, nil
@@ -315,7 +321,7 @@ func (d *Decoder) EndOfKnownDataSize(parent Element, offset int64) (bool, error)
 
 // EndOfUnknownDataSize tries to guess the end of an element which has an unknown data size.
 //
-// A parent with known data size won't raise an error but never handled as the end of the parent.
+// A parent with known data size won't raise an error but not handled as the end of the parent.
 func (d *Decoder) EndOfUnknownDataSize(parent Element, el Element) (bool, error) {
 	if parent.DataSize.Known() {
 		return false, nil

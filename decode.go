@@ -53,6 +53,8 @@ func (e *InvalidDecodeError) Error() string {
 	return "ebml: Unmarshal(nil " + e.Type.String() + ")"
 }
 
+// ErrElementOverflow signals that an element signals a length
+// greater than the parent DataSize.
 var ErrElementOverflow = errors.New("ebml: element overflow")
 
 // DecodeHeader decodes the document header.
@@ -123,6 +125,9 @@ func (d *Decoder) Decode(v interface{}) error {
 	}
 	err := d.decodeSingle(*d.el, val.Elem())
 	d.el = nil
+	if err == nil && d.elOverflow {
+		return ErrElementOverflow
+	}
 	return err
 }
 
@@ -183,7 +188,7 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 
 	occurrences := make(map[string]int)
 	var offset int64
-	for {
+	for { // 538158, 1692138 | 21848480, 988541
 		el, n, err := d.NextOf(current, offset)
 		if current.DataSize.Known() {
 			offset += int64(n) // Skip garbage eg. ErrInvalidVINTLength.
@@ -202,6 +207,11 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 			return err
 		}
 		if current.DataSize.Known() {
+			// detect element overflow early to pretend the element is smaller
+			if current.DataSize.Size() < offset+el.DataSize.Size() {
+				el.DataSize = NewKnownDataSize(current.DataSize.Size() - offset)
+				d.elOverflow = true
+			}
 			offset += el.DataSize.Size()
 		}
 		def, _ := d.def.Get(el.ID)
