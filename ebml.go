@@ -7,7 +7,6 @@ package ebml
 
 import (
 	"encoding/binary"
-	"encoding/hex"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -38,18 +37,18 @@ func init() {
 }
 
 type Def struct {
-	m    map[string]schema.Element
+	m    map[schema.ElementID]schema.Element
 	Root schema.Element
 }
 
 func NewDef(s schema.Schema) (*Def, error) {
 	def := Def{
-		m: make(map[string]schema.Element, len(s.Elements)),
+		m: make(map[schema.ElementID]schema.Element, len(s.Elements)),
 	}
-	set := make(map[string]bool, len(s.Elements))
+	set := make(map[schema.ElementID]bool, len(s.Elements))
 	for _, el := range s.Elements {
 		if el.Type == TypeMaster && el.Default != nil {
-			return nil, fmt.Errorf("ebml: master Element %s MUST NOT declare a default value.", el.ID)
+			return nil, fmt.Errorf("ebml: master Element %v MUST NOT declare a default value.", el.ID)
 		}
 		set[el.ID] = true
 		def.m[el.ID] = el
@@ -73,7 +72,7 @@ func NewDef(s schema.Schema) (*Def, error) {
 	return &def, nil
 }
 
-func (d *Def) Get(id string) (schema.Element, bool) {
+func (d *Def) Get(id schema.ElementID) (schema.Element, bool) {
 	el, ok := d.m[id]
 	return el, ok
 }
@@ -160,7 +159,7 @@ func (ds *DataSize) Size() int64 {
 }
 
 type Element struct {
-	ID       string
+	ID       schema.ElementID
 	DataSize DataSize
 }
 
@@ -265,15 +264,15 @@ func (d *Decoder) Seek(offset int64, whence int) (ret int64, err error) {
 }
 
 type UnknownDefinitionError struct {
-	id string
+	id schema.ElementID
 }
 
-func (u UnknownDefinitionError) ID() string {
+func (u UnknownDefinitionError) ID() schema.ElementID {
 	return u.id
 }
 
 func (u UnknownDefinitionError) Error() string {
-	return fmt.Sprintf("ebml: element definition not found for %s", u.id)
+	return fmt.Sprintf("ebml: element definition not found for %v", u.id)
 }
 
 // EndOfKnownDataSize tries to guess the end of an element which has a know data size.
@@ -315,37 +314,38 @@ type UnknownElementError struct {
 }
 
 func (e UnknownElementError) Error() string {
-	return fmt.Sprintf("ebml: unknown element: %s", e.el.ID)
+	return fmt.Sprintf("ebml: unknown element: %v", e.el.ID)
 }
 
 var ErrInvalidVINTLength = fmt.Errorf("ebml: invalid length descriptor")
 
 // ReadElementID reads an Element ID based on
 // https://datatracker.ietf.org/doc/html/rfc8794#section-5
-func ReadElementID(r io.Reader, maxIDLength uint) (id string, n int, err error) {
+func ReadElementID(r io.Reader, maxIDLength uint) (id schema.ElementID, n int, err error) {
 	b := make([]byte, maxIDLength)
 	// TODO: EBMLMaxIDLength can be greater than 8
 	//   https://tools.ietf.org/html/rfc8794#section-11.2.4
 	n, err = r.Read(b[:1])
 	if err != nil {
-		return "", n, err
+		return 0, n, err
 	}
 	w := vintOctetLength(b)
 	if w > len(b) {
-		return "", 1, ErrInvalidVINTLength
+		return 0, 1, ErrInvalidVINTLength
 	}
 	if w > 1 {
 		m, err := r.Read(b[1:w])
 		n += m
 		if err != nil {
-			return "", n, err
+			return 0, n, err
 		}
 	}
 	data := vintData(b, w)
 	if vintDataAllOne(data, w) {
-		return "", n, errors.New("VINT_DATA MUST NOT be set to all 1")
+		return 0, n, errors.New("VINT_DATA MUST NOT be set to all 1")
 	}
-	return "0x" + strings.ToUpper(hex.EncodeToString(b[:w])), n, nil
+	i := binary.BigEndian.Uint64(dataPad(b[:w]))
+	return schema.ElementID(i), n, nil
 }
 
 func dataPad(b []byte) []byte {

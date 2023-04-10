@@ -2,6 +2,7 @@ package ebml
 
 import (
 	"bytes"
+	"github.com/coding-socks/ebml/schema"
 	"io"
 	"testing"
 )
@@ -14,18 +15,18 @@ func TestReadElementID(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    string
+		want    schema.ElementID
 		wantErr bool
 	}{
 		{
 			name: "1 byte",
 			args: args{r: bytes.NewReader([]byte{0x81}), maxIDLength: 8},
-			want: "0x81",
+			want: 0x81,
 		},
 		{
 			name: "2 byte",
 			args: args{r: bytes.NewReader([]byte{0x41, 0x11}), maxIDLength: 8},
-			want: "0x4111",
+			want: 0x4111,
 		},
 		{
 			name:    "early EOF",

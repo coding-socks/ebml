@@ -66,7 +66,7 @@ func (d *Decoder) DecodeHeader() (*EBML, error) {
 		}
 		switch el.ID {
 		default:
-			return nil, fmt.Errorf("ebml: unexpected element %s in root", el.ID)
+			return nil, fmt.Errorf("ebml: unexpected element %v in root", el.ID)
 		case IDVoid:
 			if _, err := d.Seek(el.DataSize.Size(), io.SeekCurrent); err != nil {
 				return nil, fmt.Errorf("ebml: could not skip Void element: %w", err)
@@ -103,7 +103,7 @@ func (d *Decoder) DecodeBody(v interface{}) error {
 		}
 		switch el.ID {
 		default:
-			return fmt.Errorf("ebml: unexpected element %s in root", el.ID)
+			return fmt.Errorf("ebml: unexpected element %v in root", el.ID)
 		case IDVoid:
 			if _, err := d.Seek(el.DataSize.Size(), io.SeekCurrent); err != nil {
 				return fmt.Errorf("ebml: could not skip Void element: %w", err)
@@ -132,8 +132,9 @@ func (d *Decoder) Decode(v interface{}) error {
 }
 
 var (
-	typeTime     = reflect.TypeOf(time.Time{})
-	typeDuration = reflect.TypeOf(time.Duration(0))
+	typeTime      = reflect.TypeOf(time.Time{})
+	typeDuration  = reflect.TypeOf(time.Duration(0))
+	typeElementID = reflect.TypeOf(schema.ElementID(0))
 
 	thirdMillennium = time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
 )
@@ -186,7 +187,7 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 		return err
 	}
 
-	occurrences := make(map[string]int)
+	occurrences := make(map[schema.ElementID]int)
 	var offset int64
 	for { // 538158, 1692138 | 21848480, 988541
 		el, n, err := d.NextOf(current, offset)
@@ -317,7 +318,12 @@ func validateReflectType(v reflect.Value, def schema.Element, position int64) er
 	case TypeBinary:
 		switch v.Kind() {
 		default:
-			return &DecodeTypeError{EBMLType: def.Type, Type: v.Type(), Offset: position}
+			switch v.Type() {
+			default:
+				return &DecodeTypeError{EBMLType: def.Type, Type: v.Type(), Offset: position}
+			case typeElementID:
+				// valid type
+			}
 		case reflect.Slice:
 			e := v.Type().Elem()
 			if e.Kind() != reflect.Uint8 {
@@ -400,11 +406,20 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 		}
 
 	case TypeBinary:
-		b, err := d.readByteSlice(el.DataSize.Size())
-		if err != nil {
-			return err
+		switch val.Type() {
+		default:
+			b, err := d.readByteSlice(el.DataSize.Size())
+			if err != nil {
+				return err
+			}
+			val.SetBytes(b)
+		case typeElementID:
+			i, err := d.readUint(el.DataSize.Size())
+			if err != nil {
+				return err
+			}
+			val.SetUint(i)
 		}
-		val.SetBytes(b)
 
 	case TypeDate:
 		t, err := d.readDate(el.DataSize.Size())

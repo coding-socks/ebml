@@ -66,6 +66,23 @@ var (
 	TypeBinary   = "binary"
 )
 
+type ElementID uint64
+
+func (h ElementID) String() string {
+	enc := make([]byte, 2, 10)
+	copy(enc, "0x")
+	return string(strconv.AppendUint(enc, uint64(h), 16))
+}
+
+func (h *ElementID) UnmarshalXMLAttr(attr xml.Attr) error {
+	hh, err := strconv.ParseUint(attr.Value, 0, 64)
+	if err != nil {
+		return err
+	}
+	*h = ElementID(hh)
+	return nil
+}
+
 type Element struct {
 	Documentation      []Documentation `xml:"documentation"`
 	ImplementationNote []Note          `xml:"implementation_note"`
@@ -74,7 +91,7 @@ type Element struct {
 
 	Name               string       `xml:"name,attr"`
 	Path               string       `xml:"path,attr"`
-	ID                 string       `xml:"id,attr"`
+	ID                 ElementID    `xml:"id,attr"`
 	MinOccurs          int          `xml:"minOccurs,attr"`
 	MaxOccurs          UnboundedInt `xml:"maxOccurs,attr"`
 	Range              string       `xml:"range,attr"`

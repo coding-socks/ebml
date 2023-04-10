@@ -2,25 +2,29 @@
 
 package ebml
 
-import _ "embed"
+import (
+	_ "embed"
+
+	"github.com/coding-socks/ebml/schema"
+)
 
 //go:embed ebml.xml
 var schemaDefinition []byte
 
 var (
-	IDEBML                    = "0x1A45DFA3"
-	IDEBMLVersion             = "0x4286"
-	IDEBMLReadVersion         = "0x42F7"
-	IDEBMLMaxIDLength         = "0x42F2"
-	IDEBMLMaxSizeLength       = "0x42F3"
-	IDDocType                 = "0x4282"
-	IDDocTypeVersion          = "0x4287"
-	IDDocTypeReadVersion      = "0x4285"
-	IDDocTypeExtension        = "0x4281"
-	IDDocTypeExtensionName    = "0x4283"
-	IDDocTypeExtensionVersion = "0x4284"
-	IDVoid                    = "0xEC"
-	IDCRC32                   = "0xBF"
+	IDEBML                    schema.ElementID = 0x1a45dfa3
+	IDEBMLVersion             schema.ElementID = 0x4286
+	IDEBMLReadVersion         schema.ElementID = 0x42f7
+	IDEBMLMaxIDLength         schema.ElementID = 0x42f2
+	IDEBMLMaxSizeLength       schema.ElementID = 0x42f3
+	IDDocType                 schema.ElementID = 0x4282
+	IDDocTypeVersion          schema.ElementID = 0x4287
+	IDDocTypeReadVersion      schema.ElementID = 0x4285
+	IDDocTypeExtension        schema.ElementID = 0x4281
+	IDDocTypeExtensionName    schema.ElementID = 0x4283
+	IDDocTypeExtensionVersion schema.ElementID = 0x4284
+	IDVoid                    schema.ElementID = 0xec
+	IDCRC32                   schema.ElementID = 0xbf
 )
 
 type EBML struct {
