@@ -55,22 +55,22 @@ Inspiration for the implementation comes from the following places:
 
 ## Similar libraries
 
-Last updated: 2020-02-18
+Last updated: 2023-05-22
 
-| Syntax      | Status      |
-| ----------- | ----------- |
-| https://github.com/at-wat/ebml-go | In active development |
-| https://github.com/ebml-go/ebml + https://github.com/ebml-go/webm | Last updated on 25 Sep 2016 |
-| https://github.com/ehmry/go-ebml | Archived |
-| https://github.com/jacereda/ebml | Last updated on 10 Jan 2016 |
-| https://github.com/mediocregopher/ebmlstream | Last updated on 15 Dec 2014 |
-| https://github.com/pankrator/ebml-parser | Last updated on 24 Jun 2020 |
-| https://github.com/pixelbender/go-matroska | Last updated on 29 Oct 2018 |
-| https://github.com/pubblic/ebml | Last updated on 12 Dec 2018 |
-| https://github.com/quadrifoglio/go-mkv | Last updated on 20 Jun 2018 |
-| https://github.com/rrerolle/ebml-go | Last updated on 1 Dec 2012 |
-| https://github.com/remko/go-mkvparse | Last updated on 14 Jun 2020 |
-| https://github.com/tpjg/ebml-go | Last updated on 1 Dec 2012 |
+| Syntax                                                            | Status                      |
+|-------------------------------------------------------------------|-----------------------------|
+| https://github.com/at-wat/ebml-go                                 | In active development       |
+| https://github.com/ebml-go/ebml + https://github.com/ebml-go/webm | Last updated on 17 Nov 2022 |
+| https://github.com/ehmry/go-ebml                                  | Deleted                     |
+| https://github.com/jacereda/ebml                                  | Last updated on 10 Jan 2016 |
+| https://github.com/mediocregopher/ebmlstream                      | Last updated on 15 Dec 2014 |
+| https://github.com/pankrator/ebml-parser                          | Last updated on 24 Jun 2020 |
+| https://github.com/pixelbender/go-matroska                        | Last updated on 29 Oct 2018 |
+| https://github.com/pubblic/ebml                                   | Last updated on 12 Dec 2018 |
+| https://github.com/quadrifoglio/go-mkv                            | Last updated on 20 Jun 2018 |
+| https://github.com/rrerolle/ebml-go                               | Last updated on 1 Dec 2012  |
+| https://github.com/remko/go-mkvparse                              | Last updated on 19 May 2022 |
+| https://github.com/tpjg/ebml-go                                   | Last updated on 1 Dec 2012  |
 
 [rfc8794]: https://tools.ietf.org/html/rfc8794
 [ebml-specification]: https://github.com/ietf-wg-cellar/ebml-specification
