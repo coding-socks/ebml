@@ -134,33 +134,14 @@ func Definition(docType string) (*Def, error) {
 	return dt, nil
 }
 
-const (
-	unknownDS dsMode = iota
-	knownDS
-)
-
-type dsMode int
-
-type DataSize struct {
-	m dsMode
-	s int64
-}
-
-func NewKnownDataSize(s int64) DataSize {
-	return DataSize{m: knownDS, s: s}
-}
-
-func (ds *DataSize) Known() bool {
-	return ds.m == knownDS
-}
-
-func (ds *DataSize) Size() int64 {
-	return ds.s
-}
-
 type Element struct {
-	ID       schema.ElementID
-	DataSize DataSize
+	ID schema.ElementID
+
+	// DataSize expresses the length of Element Data. Unknown data length is
+	// represented with `-1`.
+	//
+	// With 8 octets it can have 2^56-2 possible values. That fits into int64.
+	DataSize int64
 }
 
 // Reader provides a low level API to interacts with EBML documents.
@@ -279,20 +260,20 @@ func (u UnknownDefinitionError) Error() string {
 //
 // A parent with unknown data size won't raise an error but not handled as the end of the parent.
 func (d *Decoder) EndOfKnownDataSize(parent Element, offset int64) (bool, error) {
-	if !parent.DataSize.Known() {
+	if parent.DataSize == -1 {
 		return false, nil
 	}
-	if offset > parent.DataSize.Size() {
+	if offset > parent.DataSize {
 		return true, ErrElementOverflow
 	}
-	return offset == parent.DataSize.Size(), nil
+	return offset == parent.DataSize, nil
 }
 
 // EndOfUnknownDataSize tries to guess the end of an element which has an unknown data size.
 //
 // A parent with known data size won't raise an error but not handled as the end of the parent.
 func (d *Decoder) EndOfUnknownDataSize(parent Element, el Element) (bool, error) {
-	if parent.DataSize.Known() {
+	if parent.DataSize != -1 {
 		return false, nil
 	}
 	if el.ID == IDCRC32 || el.ID == IDVoid { // global elements are child of anything
@@ -356,24 +337,24 @@ func dataPad(b []byte) []byte {
 
 // ReadElementDataSize reads an Element ID based on
 // https://datatracker.ietf.org/doc/html/rfc8794#section-6
-func ReadElementDataSize(r io.Reader, maxSizeLength uint) (ds DataSize, n int, err error) {
+func ReadElementDataSize(r io.Reader, maxSizeLength uint) (ds int64, n int, err error) {
 	b := make([]byte, maxSizeLength)
 	// TODO: EBMLMaxSizeLength can be greater than 8
 	//   https://tools.ietf.org/html/rfc8794#section-11.2.5
 	n, err = r.Read(b[:1])
 	if err != nil {
-		return DataSize{}, n, err
+		return 0, n, err
 	}
 	w := vintOctetLength(b)
 	m, err := r.Read(b[1:w])
 	n += m
 	if err != nil {
-		return DataSize{}, n, err
+		return 0, n, err
 	}
 	d := vintData(b, w)
 	if vintDataAllOne(d, w) {
-		return DataSize{}, n, nil
+		return -1, n, nil
 	}
 	i := binary.BigEndian.Uint64(dataPad(d))
-	return DataSize{m: knownDS, s: int64(i)}, n, nil
+	return int64(i), n, nil
 }

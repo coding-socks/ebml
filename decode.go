@@ -68,7 +68,7 @@ func (d *Decoder) DecodeHeader() (*EBML, error) {
 		default:
 			return nil, fmt.Errorf("ebml: unexpected element %v in root", el.ID)
 		case IDVoid:
-			if _, err := d.Seek(el.DataSize.Size(), io.SeekCurrent); err != nil {
+			if _, err := d.Seek(el.DataSize, io.SeekCurrent); err != nil {
 				return nil, fmt.Errorf("ebml: could not skip Void element: %w", err)
 			}
 			continue
@@ -105,7 +105,7 @@ func (d *Decoder) DecodeBody(v interface{}) error {
 		default:
 			return fmt.Errorf("ebml: unexpected element %v in root", el.ID)
 		case IDVoid:
-			if _, err := d.Seek(el.DataSize.Size(), io.SeekCurrent); err != nil {
+			if _, err := d.Seek(el.DataSize, io.SeekCurrent); err != nil {
 				return fmt.Errorf("ebml: could not skip Void element: %w", err)
 			}
 			continue
@@ -191,7 +191,7 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 	var offset int64
 	for { // 538158, 1692138 | 21848480, 988541
 		el, n, err := d.NextOf(current, offset)
-		if current.DataSize.Known() {
+		if current.DataSize != -1 {
 			offset += int64(n) // Skip garbage eg. ErrInvalidVINTLength.
 		}
 		if err != nil {
@@ -202,25 +202,25 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 				break
 			}
 			var e *UnknownElementError
-			if !current.DataSize.Known() && errors.As(err, &e) {
+			if current.DataSize == -1 && errors.As(err, &e) {
 				break
 			}
 			return err
 		}
-		if current.DataSize.Known() {
+		if current.DataSize != -1 {
 			// detect element overflow early to pretend the element is smaller
-			if current.DataSize.Size() < offset+el.DataSize.Size() {
-				el.DataSize = NewKnownDataSize(current.DataSize.Size() - offset)
+			if current.DataSize < offset+el.DataSize {
+				el.DataSize = current.DataSize - offset
 				d.elOverflow = true
 			}
-			offset += el.DataSize.Size()
+			offset += el.DataSize
 		}
 		def, _ := d.def.Get(el.ID)
 		occurrences[el.ID]++
 		fieldv, found := findField(val, tinfo, def.Name)
 		if !found {
-			if el.DataSize.Known() {
-				if _, err := d.Seek(el.DataSize.Size(), io.SeekCurrent); err != nil {
+			if el.DataSize != -1 {
+				if _, err := d.Seek(el.DataSize, io.SeekCurrent); err != nil {
 					return fmt.Errorf("ebml: was not able to skip element: %w", err)
 				}
 				continue
@@ -242,7 +242,7 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 		}
 	}
 
-	if current.DataSize.Known() && offset < current.DataSize.Size() {
+	if current.DataSize != -1 && offset < current.DataSize {
 		return io.ErrUnexpectedEOF
 	}
 
@@ -408,13 +408,13 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 	case TypeBinary:
 		switch val.Type() {
 		default:
-			b, err := d.readByteSlice(el.DataSize.Size())
+			b, err := d.readByteSlice(el.DataSize)
 			if err != nil {
 				return err
 			}
 			val.SetBytes(b)
 		case typeElementID:
-			i, err := d.readUint(el.DataSize.Size())
+			i, err := d.readUint(el.DataSize)
 			if err != nil {
 				return err
 			}
@@ -422,21 +422,21 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 		}
 
 	case TypeDate:
-		t, err := d.readDate(el.DataSize.Size())
+		t, err := d.readDate(el.DataSize)
 		if err != nil {
 			return err
 		}
 		val.Set(reflect.ValueOf(t))
 
 	case TypeFloat:
-		f, err := d.readFloat(el.DataSize.Size())
+		f, err := d.readFloat(el.DataSize)
 		if err != nil {
 			return err
 		}
 		val.SetFloat(f)
 
 	case TypeInteger:
-		i, err := d.readInt(el.DataSize.Size())
+		i, err := d.readInt(el.DataSize)
 		if err != nil {
 			return err
 		}
@@ -445,13 +445,13 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 	case TypeUinteger:
 		switch val.Type() {
 		default:
-			i, err := d.readUint(el.DataSize.Size())
+			i, err := d.readUint(el.DataSize)
 			if err != nil {
 				return err
 			}
 			val.SetUint(i)
 		case typeDuration:
-			i, err := d.readInt(el.DataSize.Size())
+			i, err := d.readInt(el.DataSize)
 			if err != nil {
 				return err
 			}
@@ -459,7 +459,7 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 		}
 
 	case TypeString, TypeUTF8:
-		str, err := d.readString(el.DataSize.Size())
+		str, err := d.readString(el.DataSize)
 		if err != nil {
 			return err
 		}
