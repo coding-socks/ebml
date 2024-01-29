@@ -189,7 +189,7 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 
 	occurrences := make(map[schema.ElementID]int)
 	var offset int64
-	for { // 538158, 1692138 | 21848480, 988541
+	for {
 		el, n, err := d.NextOf(current, offset)
 		if current.DataSize != -1 {
 			offset += int64(n) // Skip garbage eg. ErrInvalidVINTLength.
