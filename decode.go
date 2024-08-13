@@ -1,12 +1,10 @@
 package ebml
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"github.com/coding-socks/ebml/schema"
 	"io"
-	"math"
 	"reflect"
 	"strconv"
 	"time"
@@ -408,13 +406,13 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 	case TypeBinary:
 		switch val.Type() {
 		default:
-			b, err := d.readByteSlice(el.DataSize)
+			b, err := d.r.Bytes(el.DataSize)
 			if err != nil {
 				return err
 			}
 			val.SetBytes(b)
 		case typeElementID:
-			i, err := d.readUint(el.DataSize)
+			i, err := d.r.Uint(el.DataSize)
 			if err != nil {
 				return err
 			}
@@ -422,21 +420,21 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 		}
 
 	case TypeDate:
-		t, err := d.readDate(el.DataSize)
+		t, err := d.r.Date(el.DataSize)
 		if err != nil {
 			return err
 		}
 		val.Set(reflect.ValueOf(t))
 
 	case TypeFloat:
-		f, err := d.readFloat(el.DataSize)
+		f, err := d.r.Float(el.DataSize)
 		if err != nil {
 			return err
 		}
 		val.SetFloat(f)
 
 	case TypeInteger:
-		i, err := d.readInt(el.DataSize)
+		i, err := d.r.Int(el.DataSize)
 		if err != nil {
 			return err
 		}
@@ -445,13 +443,13 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 	case TypeUinteger:
 		switch val.Type() {
 		default:
-			i, err := d.readUint(el.DataSize)
+			i, err := d.r.Uint(el.DataSize)
 			if err != nil {
 				return err
 			}
 			val.SetUint(i)
 		case typeDuration:
-			i, err := d.readInt(el.DataSize)
+			i, err := d.r.Int(el.DataSize)
 			if err != nil {
 				return err
 			}
@@ -459,84 +457,11 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 		}
 
 	case TypeString, TypeUTF8:
-		str, err := d.readString(el.DataSize)
+		str, err := d.r.String(el.DataSize)
 		if err != nil {
 			return err
 		}
 		val.SetString(str)
 	}
 	return nil
-}
-
-func (d *Decoder) readByteSlice(ds int64) ([]byte, error) {
-	b := make([]byte, ds)
-	_, err := io.ReadFull(d.r, b)
-	return b, err
-}
-
-func (d *Decoder) readDate(ds int64) (time.Time, error) {
-	i, err := d.readInt(ds)
-	if err != nil {
-		return time.Time{}, err
-	}
-	return thirdMillennium.Add(time.Nanosecond * time.Duration(i)), nil
-}
-
-func (d *Decoder) readString(ds int64) (string, error) {
-	b, err := d.readByteSlice(ds)
-	if err != nil {
-		return "", err
-	}
-	// TODO: detect value greater than VINTMAX
-	return string(b), err
-}
-
-func (d *Decoder) readFloat(ds int64) (float64, error) {
-	b, err := d.readByteSlice(ds)
-	if err != nil {
-		return 0, err
-	}
-	// A Float Element MUST declare a length of either
-	// zero octets (0 bit), four octets (32 bit),
-	// or eight octets (64 bit).
-	switch len(b) {
-	case 0:
-		return 0, nil
-	case 4:
-		return float64(math.Float32frombits(binary.BigEndian.Uint32(b))), nil
-	case 8:
-		return math.Float64frombits(binary.BigEndian.Uint64(b)), nil
-	default:
-		return 0, errors.New("ebml: data length must be 0 bit, 32 bit or 64 bit for a float")
-	}
-}
-
-func (d *Decoder) readInt(ds int64) (int64, error) {
-	b, err := d.readByteSlice(ds)
-	if err != nil {
-		return 0, err
-	}
-	if len(b) > 8 {
-		return 0, errors.New("ebml: max length for an unsigned integer is eight octets")
-	}
-	i := int64(0)
-	for _, bb := range b {
-		i = (i << 8) | int64(bb)
-	}
-	return i, nil
-}
-
-func (d *Decoder) readUint(ds int64) (uint64, error) {
-	b, err := d.readByteSlice(ds)
-	if err != nil {
-		return 0, err
-	}
-	if len(b) > 8 {
-		return 0, errors.New("ebml: max length for an unsigned integer is eight octets")
-	}
-	i := uint64(0)
-	for _, bb := range b {
-		i = (i << 8) | uint64(bb)
-	}
-	return i, nil
 }

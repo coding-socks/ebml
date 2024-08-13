@@ -12,9 +12,11 @@ import (
 	"fmt"
 	"github.com/coding-socks/ebml/schema"
 	"io"
+	"math"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -181,6 +183,79 @@ func (r *Reader) Next() (el Element, n int, err error) {
 
 func (r *Reader) Read(b []byte) (n int, err error) {
 	return r.r.Read(b)
+}
+
+func (r *Reader) Bytes(ds int64) ([]byte, error) {
+	b := make([]byte, ds)
+	_, err := io.ReadFull(r.r, b)
+	return b, err
+}
+
+func (r *Reader) Int(ds int64) (int64, error) {
+	b, err := r.Bytes(ds)
+	if err != nil {
+		return 0, err
+	}
+	if len(b) > 8 {
+		return 0, errors.New("ebml: max length for an unsigned integer is eight octets")
+	}
+	i := int64(0)
+	for _, bb := range b {
+		i = (i << 8) | int64(bb)
+	}
+	return i, nil
+}
+
+func (r *Reader) Uint(ds int64) (uint64, error) {
+	b, err := r.Bytes(ds)
+	if err != nil {
+		return 0, err
+	}
+	if len(b) > 8 {
+		return 0, errors.New("ebml: max length for an unsigned integer is eight octets")
+	}
+	i := uint64(0)
+	for _, bb := range b {
+		i = (i << 8) | uint64(bb)
+	}
+	return i, nil
+}
+
+func (r *Reader) Float(ds int64) (float64, error) {
+	b, err := r.Bytes(ds)
+	if err != nil {
+		return 0, err
+	}
+	// A Float Element MUST declare a length of either
+	// zero octets (0 bit), four octets (32 bit),
+	// or eight octets (64 bit).
+	switch len(b) {
+	case 0:
+		return 0, nil
+	case 4:
+		return float64(math.Float32frombits(binary.BigEndian.Uint32(b))), nil
+	case 8:
+		return math.Float64frombits(binary.BigEndian.Uint64(b)), nil
+	default:
+		return 0, errors.New("ebml: data length must be 0 bit, 32 bit or 64 bit for a float")
+	}
+}
+
+func (r *Reader) String(ds int64) (string, error) {
+	b, err := r.Bytes(ds)
+	if err != nil {
+		return "", err
+	}
+	// TODO: detect value greater than VINTMAX
+	return string(b), err
+}
+
+func (r *Reader) Date(ds int64) (time.Time, error) {
+	i, err := r.Int(ds)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return thirdMillennium.Add(time.Nanosecond * time.Duration(i)), nil
 }
 
 func (r *Reader) Seek(offset int64, whence int) (ret int64, err error) {
