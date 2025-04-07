@@ -13,7 +13,7 @@ An EBML parser written in Go.
 
 Source: https://en.wikipedia.org/wiki/Extensible_Binary_Meta_Language
 
-This library is based on the July 2020 version of [RFC 8794][rfc8794] (with additions from [github.com/ietf-wg-cellar/ebml-specification][ebml-specification]). This document did not reach ["Internet Standard"](https://tools.ietf.org/html/rfc2026#section-4.1.3) status yet. RFC 8794 is in a ["Proposed Standard"](https://tools.ietf.org/html/rfc2026#section-4.1.1) status.
+This library is based on the July 2020 version of [RFC 8794][rfc8794] (with additions from [github.com/ietf-wg-cellar/ebml-specification][ebml-specification]). This document did not reach ["Internet Standard"](https://datatracker.ietf.org/doc/html/rfc2026#section-4.1.3) status yet. RFC 8794 is in a ["Proposed Standard"](https://datatracker.ietf.org/doc/html/rfc2026#section-4.1.1) status.
 
 The goal of this project is to create an implementation based on the document and during the implementation provide feedback.
 
@@ -23,7 +23,7 @@ The goal of this project is to create an implementation based on the document an
 
 Beta version will be considered when the feature set covers the documents the implementation is based on, and the public API is reached a mature state.
 
-Stable version will be considered only if enough positive feedback is gathered to lock the public API and all document the implementation is based on became ["Internet Standard"](https://tools.ietf.org/html/rfc2026#section-4.1.3).
+Stable version will be considered only if enough positive feedback is gathered to lock the public API and all document the implementation is based on became ["Internet Standard"](https://datatracker.ietf.org/doc/html/rfc2026#section-4.1.3).
 
 ## Documents
 
@@ -72,5 +72,5 @@ Last updated: 2023-05-22
 | https://github.com/remko/go-mkvparse                             | Last updated on 19 May 2022 |
 | https://github.com/tpjg/ebml-go                                  | Last updated on 1 Dec 2012  |
 
-[rfc8794]: https://tools.ietf.org/html/rfc8794
+[rfc8794]: https://datatracker.ietf.org/doc/html/rfc8794
 [ebml-specification]: https://github.com/ietf-wg-cellar/ebml-specification

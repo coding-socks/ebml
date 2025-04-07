@@ -25,3 +25,7 @@ func Join(elem ...string) string {
 	}
 	return string(buf)
 }
+
+func Lvl(path string) int {
+	return strings.Count(path, "\\") + 1
+}

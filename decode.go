@@ -3,6 +3,7 @@ package ebml
 import (
 	"errors"
 	"fmt"
+	"github.com/coding-socks/ebml/ebmltext"
 	"github.com/coding-socks/ebml/schema"
 	"io"
 	"reflect"
@@ -133,8 +134,6 @@ var (
 	typeTime      = reflect.TypeOf(time.Time{})
 	typeDuration  = reflect.TypeOf(time.Duration(0))
 	typeElementID = reflect.TypeOf(schema.ElementID(0))
-
-	thirdMillennium = time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
 )
 
 func findField(val reflect.Value, tinfo *typeInfo, name string) (fieldv reflect.Value, found bool) {
@@ -180,20 +179,24 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 		// Everything is ok
 	}
 	typ := val.Type()
-	tinfo, err := getTypeInfo(typ)
-	if err != nil {
-		return err
+	tinfo, ok := d.typeInfos[typ]
+	if !ok {
+		var err error
+		if tinfo, err = getTypeInfo(typ); err != nil {
+			return err
+		}
+		d.typeInfos[typ] = tinfo
 	}
 
 	occurrences := make(map[schema.ElementID]int)
-	var offset int64
+	offsetStart := d.r.InputOffset()
+	offset := int64(0)
 	for {
-		el, n, err := d.NextOf(current, offset)
-		if current.DataSize != -1 {
-			offset += int64(n) // Skip garbage eg. ErrInvalidVINTLength.
-		}
+		el, _, err := d.NextOf(current, d.r.InputOffset()-offsetStart)
+		offset = d.r.InputOffset() - offsetStart
 		if err != nil {
-			if err == ErrInvalidVINTLength {
+			if err == ebmltext.ErrInvalidVINTWidth {
+				d.r.Seek(1, io.SeekCurrent)
 				continue
 			}
 			if err == io.EOF {
@@ -219,7 +222,7 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 		if !found {
 			if el.DataSize != -1 {
 				if _, err := d.Seek(el.DataSize, io.SeekCurrent); err != nil {
-					return fmt.Errorf("ebml: was not able to skip element: %w", err)
+					return fmt.Errorf("ebml: failed to skip element: %w", err)
 				}
 				continue
 			} else if def.Type == TypeMaster {
@@ -244,9 +247,7 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 		return io.ErrUnexpectedEOF
 	}
 
-	elements := d.def.Values()
-	for i := range elements {
-		sel := elements[i]
+	for sel := range d.def.All() {
 		if sel.Default == nil || occurrences[sel.ID] > 0 {
 			continue
 		}
@@ -374,6 +375,8 @@ func validateReflectType(v reflect.Value, def schema.Element, position int64) er
 	return nil
 }
 
+var DefaultAllocationWindow = int64(1<<24) - 1
+
 func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 	def, _ := d.def.Get(el.ID)
 	if val.Kind() == reflect.Ptr {
@@ -397,22 +400,30 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 		return err
 	}
 
-	switch def.Type {
-	case TypeMaster:
-		if err := d.decodeMaster(val, el); err != nil {
-			return err
-		}
+	if def.Type == TypeMaster {
+		return d.decodeMaster(val, el)
+	}
 
+	if int64(cap(d.window)) < el.DataSize {
+		n := DefaultAllocationWindow
+		for n < el.DataSize {
+			n = (n << 1) + 1
+		}
+		d.window = make([]byte, n)
+	}
+	b := d.window[:el.DataSize]
+	if _, err := io.ReadFull(d.r, b); err != nil {
+		return err
+	}
+
+	switch def.Type {
 	case TypeBinary:
 		switch val.Type() {
 		default:
-			b, err := d.r.Bytes(el.DataSize)
-			if err != nil {
-				return err
-			}
+			d.window = d.window[el.DataSize:]
 			val.SetBytes(b)
 		case typeElementID:
-			i, err := d.r.Uint(el.DataSize)
+			i, err := ebmltext.Uint(b)
 			if err != nil {
 				return err
 			}
@@ -420,21 +431,21 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 		}
 
 	case TypeDate:
-		t, err := d.r.Date(el.DataSize)
+		t, err := ebmltext.Date(b)
 		if err != nil {
 			return err
 		}
 		val.Set(reflect.ValueOf(t))
 
 	case TypeFloat:
-		f, err := d.r.Float(el.DataSize)
+		f, err := ebmltext.Float(b)
 		if err != nil {
 			return err
 		}
 		val.SetFloat(f)
 
 	case TypeInteger:
-		i, err := d.r.Int(el.DataSize)
+		i, err := ebmltext.Int(b)
 		if err != nil {
 			return err
 		}
@@ -443,13 +454,13 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 	case TypeUinteger:
 		switch val.Type() {
 		default:
-			i, err := d.r.Uint(el.DataSize)
+			i, err := ebmltext.Uint(b)
 			if err != nil {
 				return err
 			}
 			val.SetUint(i)
 		case typeDuration:
-			i, err := d.r.Int(el.DataSize)
+			i, err := ebmltext.Int(b)
 			if err != nil {
 				return err
 			}
@@ -457,7 +468,7 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 		}
 
 	case TypeString, TypeUTF8:
-		str, err := d.r.String(el.DataSize)
+		str, err := ebmltext.String(b)
 		if err != nil {
 			return err
 		}

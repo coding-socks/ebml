@@ -10,13 +10,15 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"github.com/coding-socks/ebml/ebmltext"
 	"github.com/coding-socks/ebml/schema"
 	"io"
-	"math"
+	"iter"
+	"maps"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
-	"time"
 )
 
 var (
@@ -79,14 +81,8 @@ func (d *Def) Get(id schema.ElementID) (schema.Element, bool) {
 	return el, ok
 }
 
-func (d *Def) Values() []schema.Element {
-	els := make([]schema.Element, len(d.m))
-	var i int
-	for s := range d.m {
-		els[i] = d.m[s]
-		i++
-	}
-	return els
+func (d *Def) All() iter.Seq[schema.Element] {
+	return maps.Values(d.m)
 }
 
 // Register makes a schema.Schema available by the provided doc type.
@@ -146,146 +142,45 @@ type Element struct {
 	DataSize int64
 }
 
-// Reader provides a low level API to interacts with EBML documents.
-// Use directly with caution.
-type Reader struct {
-	r io.ReadSeeker
-
-	// https://tools.ietf.org/html/rfc8794#section-11.2.4
-	MaxIDLength uint
-	// https://tools.ietf.org/html/rfc8794#section-11.2.5
-	MaxSizeLength uint
-}
-
-func NewReader(r io.ReadSeeker) *Reader {
-	return &Reader{
-		r: r,
-
-		MaxIDLength:   DefaultMaxIDLength,
-		MaxSizeLength: DefaultMaxSizeLength,
-	}
-}
-
-// Next reads the following element id and data size.
-func (r *Reader) Next() (el Element, n int, err error) {
-	el.ID, n, err = ReadElementID(r, r.MaxIDLength)
-	if err != nil {
-		return Element{}, n, err
-	}
-	var m int
-	el.DataSize, m, err = ReadElementDataSize(r, r.MaxSizeLength)
-	n += m
-	if err != nil {
-		return Element{}, n, err
-	}
-	return el, n, nil
-}
-
-func (r *Reader) Read(b []byte) (n int, err error) {
-	return r.r.Read(b)
-}
-
-func (r *Reader) Bytes(ds int64) ([]byte, error) {
-	b := make([]byte, ds)
-	_, err := io.ReadFull(r.r, b)
-	return b, err
-}
-
-func (r *Reader) Int(ds int64) (int64, error) {
-	b, err := r.Bytes(ds)
-	if err != nil {
-		return 0, err
-	}
-	if len(b) > 8 {
-		return 0, errors.New("ebml: max length for an unsigned integer is eight octets")
-	}
-	i := int64(0)
-	for _, bb := range b {
-		i = (i << 8) | int64(bb)
-	}
-	return i, nil
-}
-
-func (r *Reader) Uint(ds int64) (uint64, error) {
-	b, err := r.Bytes(ds)
-	if err != nil {
-		return 0, err
-	}
-	if len(b) > 8 {
-		return 0, errors.New("ebml: max length for an unsigned integer is eight octets")
-	}
-	i := uint64(0)
-	for _, bb := range b {
-		i = (i << 8) | uint64(bb)
-	}
-	return i, nil
-}
-
-func (r *Reader) Float(ds int64) (float64, error) {
-	b, err := r.Bytes(ds)
-	if err != nil {
-		return 0, err
-	}
-	// A Float Element MUST declare a length of either
-	// zero octets (0 bit), four octets (32 bit),
-	// or eight octets (64 bit).
-	switch len(b) {
-	case 0:
-		return 0, nil
-	case 4:
-		return float64(math.Float32frombits(binary.BigEndian.Uint32(b))), nil
-	case 8:
-		return math.Float64frombits(binary.BigEndian.Uint64(b)), nil
-	default:
-		return 0, errors.New("ebml: data length must be 0 bit, 32 bit or 64 bit for a float")
-	}
-}
-
-func (r *Reader) String(ds int64) (string, error) {
-	b, err := r.Bytes(ds)
-	if err != nil {
-		return "", err
-	}
-	// TODO: detect value greater than VINTMAX
-	return string(b), err
-}
-
-func (r *Reader) Date(ds int64) (time.Time, error) {
-	i, err := r.Int(ds)
-	if err != nil {
-		return time.Time{}, err
-	}
-	return thirdMillennium.Add(time.Nanosecond * time.Duration(i)), nil
-}
-
-func (r *Reader) Seek(offset int64, whence int) (ret int64, err error) {
-	return r.r.Seek(offset, whence)
-}
-
 // A Decoder represents an EBML parser reading a particular input stream.
 type Decoder struct {
-	r   *Reader
+	r   *ebmltext.Decoder
 	def *Def
 
 	el *Element
 	// elOverflow signals to return ErrElementOverflow at the end of decode.
 	elOverflow bool
+
+	window    []byte
+	typeInfos map[reflect.Type]*typeInfo
 }
 
 // NewDecoder reads and parses an EBML Document from r.
 func NewDecoder(r io.ReadSeeker) *Decoder {
 	return &Decoder{
-		r:   NewReader(r),
+		r:   ebmltext.NewDecoder(r),
 		def: HeaderDef,
+
+		typeInfos: make(map[reflect.Type]*typeInfo),
 	}
 }
 
 // Next reads the following element id and data size.
 // It must be called before Decode.
 func (d *Decoder) Next() (el Element, n int, err error) {
-	el, i, err := d.r.Next()
+	start := d.r.InputOffset()
+	el.ID, err = d.r.ReadElementID()
+	if err != nil {
+		return Element{}, int(d.r.InputOffset() - start), err
+	}
+	d.r.Release()
+	el.DataSize, err = d.r.ReadElementDataSize()
+	if err != nil {
+		return Element{}, int(d.r.InputOffset() - start), err
+	}
+	d.r.Release()
 	d.el = &el
-	return el, i, err
+	return el, int(d.r.InputOffset() - start), err
 }
 
 // NextOf reads the following element id and data size
@@ -380,7 +275,7 @@ var ErrInvalidVINTLength = fmt.Errorf("ebml: invalid length descriptor")
 func ReadElementID(r io.Reader, maxIDLength uint) (id schema.ElementID, n int, err error) {
 	b := make([]byte, maxIDLength)
 	// TODO: EBMLMaxIDLength can be greater than 8
-	//   https://tools.ietf.org/html/rfc8794#section-11.2.4
+	//   https://datatracker.ietf.org/doc/html/rfc8794#section-11.2.4
 	n, err = r.Read(b[:1])
 	if err != nil {
 		return 0, n, err
@@ -415,7 +310,7 @@ func dataPad(b []byte) []byte {
 func ReadElementDataSize(r io.Reader, maxSizeLength uint) (ds int64, n int, err error) {
 	b := make([]byte, maxSizeLength)
 	// TODO: EBMLMaxSizeLength can be greater than 8
-	//   https://tools.ietf.org/html/rfc8794#section-11.2.5
+	//   https://datatracker.ietf.org/doc/html/rfc8794#section-11.2.5
 	n, err = r.Read(b[:1])
 	if err != nil {
 		return 0, n, err

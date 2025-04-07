@@ -20,8 +20,6 @@ type fieldInfo struct {
 // getTypeInfo returns the typeInfo structure with details necessary
 // for marshaling and unmarshaling typ.
 func getTypeInfo(typ reflect.Type) (*typeInfo, error) {
-	// TODO: use cache to load typeInfo
-
 	tinfo := &typeInfo{}
 	if typ.Kind() == reflect.Struct {
 		n := typ.NumField()

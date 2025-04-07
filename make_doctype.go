@@ -12,7 +12,6 @@ import (
 	"github.com/coding-socks/ebml/schema"
 	"golang.org/x/tools/imports"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -39,14 +38,14 @@ func main() {
 
 	out, err := imports.Process(filename, buf.Bytes(), nil)
 	if err != nil {
-		err = ioutil.WriteFile(filename, buf.Bytes(), 0666)
+		err = io.WriteFile(filename, buf.Bytes(), 0666)
 		if err != nil {
 			log.Fatal(err)
 		}
 		log.Fatal(err)
 	}
 
-	err = ioutil.WriteFile(filename, out, 0666)
+	err = io.WriteFile(filename, out, 0666)
 	if err != nil {
 		log.Fatal(err)
 	}

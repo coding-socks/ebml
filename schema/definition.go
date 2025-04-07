@@ -138,7 +138,7 @@ func (s *Element) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 		// TODO: consider using pointer to differentiate between not set and real value
 		// [...] If the maxOccurs attribute is not present, then there is no
 		// upper bound for the permitted number of occurrences [...]
-		// https://www.rfc-editor.org/rfc/rfc8794#name-maxoccurs
+		// https://datatracker.ietf.org/doc/html/rfc8794#name-maxoccurs
 		MaxOccurs:          UnboundedInt{unbounded: true}, // default="unbounded"
 		UnknownSizeAllowed: false,                         // default="false"
 		Recursive:          false,                         // default="false"
@@ -210,7 +210,7 @@ func ResolveGoType(s, name string) string {
 		return reflect.Float64.String()
 	case TypeString:
 		// TODO: Enforce ASCII only characters (in the range of 0x20 to 0x7E).
-		//  https://www.rfc-editor.org/rfc/rfc8794#name-string-element
+		//  https://datatracker.ietf.org/doc/html/rfc8794#name-string-element
 		return reflect.String.String()
 	case TypeDate:
 		return "time.Time"
