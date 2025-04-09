@@ -16,11 +16,11 @@ jobs:
     name: "Test generated files are up to date"
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v5
         with:
-          go-version: '^1.15.7'
+          go-version: '^1.23.0'
 
       - name: Regenerate files
         run: go generate ./...
