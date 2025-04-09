@@ -55,7 +55,7 @@ Inspiration for the implementation comes from the following places:
 
 ## Similar libraries
 
-Last updated: 2023-05-22
+Last updated: 2025-04-09
 
 | URL                                                              | Status                      |
 |------------------------------------------------------------------|-----------------------------|
@@ -69,7 +69,7 @@ Last updated: 2023-05-22
 | https://github.com/pubblic/ebml                                  | Last updated on 12 Dec 2018 |
 | https://github.com/quadrifoglio/go-mkv                           | Last updated on 20 Jun 2018 |
 | https://github.com/rrerolle/ebml-go                              | Last updated on 1 Dec 2012  |
-| https://github.com/remko/go-mkvparse                             | Last updated on 19 May 2022 |
+| https://github.com/remko/go-mkvparse                             | Last updated on 9 Aug 2023  |
 | https://github.com/tpjg/ebml-go                                  | Last updated on 1 Dec 2012  |
 
 [rfc8794]: https://datatracker.ietf.org/doc/html/rfc8794
