@@ -38,14 +38,14 @@ func main() {
 
 	out, err := imports.Process(filename, buf.Bytes(), nil)
 	if err != nil {
-		err = io.WriteFile(filename, buf.Bytes(), 0666)
+		err = os.WriteFile(filename, buf.Bytes(), 0666)
 		if err != nil {
 			log.Fatal(err)
 		}
 		log.Fatal(err)
 	}
 
-	err = io.WriteFile(filename, out, 0666)
+	err = os.WriteFile(filename, out, 0666)
 	if err != nil {
 		log.Fatal(err)
 	}
