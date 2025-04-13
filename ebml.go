@@ -6,7 +6,6 @@
 package ebml
 
 import (
-	"encoding/binary"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -168,19 +167,18 @@ func NewDecoder(r io.ReadSeeker) *Decoder {
 // Next reads the following element id and data size.
 // It must be called before Decode.
 func (d *Decoder) Next() (el Element, n int, err error) {
-	start := d.r.InputOffset()
 	el.ID, err = d.r.ReadElementID()
 	if err != nil {
-		return Element{}, int(d.r.InputOffset() - start), err
+		return Element{}, n, err
 	}
-	d.r.Release()
+	n += d.r.Release()
 	el.DataSize, err = d.r.ReadElementDataSize()
 	if err != nil {
-		return Element{}, int(d.r.InputOffset() - start), err
+		return Element{}, n, err
 	}
-	d.r.Release()
+	n += d.r.Release()
 	d.el = &el
-	return el, int(d.r.InputOffset() - start), err
+	return el, n, err
 }
 
 // NextOf reads the following element id and data size
@@ -260,71 +258,4 @@ func (d *Decoder) EndOfUnknownDataSize(parent Element, el Element) (bool, error)
 	return !strings.HasPrefix(nextDef.Path, def.Path) || len(nextDef.Path) == len(def.Path), nil
 }
 
-type UnknownElementError struct {
-	el Element
-}
-
-func (e UnknownElementError) Error() string {
-	return fmt.Sprintf("ebml: unknown element: %v", e.el.ID)
-}
-
-var ErrInvalidVINTLength = fmt.Errorf("ebml: invalid length descriptor")
-
-// ReadElementID reads an Element ID based on
-// https://datatracker.ietf.org/doc/html/rfc8794#section-5
-func ReadElementID(r io.Reader, maxIDLength uint) (id schema.ElementID, n int, err error) {
-	b := make([]byte, maxIDLength)
-	// TODO: EBMLMaxIDLength can be greater than 8
-	//   https://datatracker.ietf.org/doc/html/rfc8794#section-11.2.4
-	n, err = r.Read(b[:1])
-	if err != nil {
-		return 0, n, err
-	}
-	w := vintOctetLength(b)
-	if w > len(b) {
-		return 0, 1, ErrInvalidVINTLength
-	}
-	if w > 1 {
-		m, err := r.Read(b[1:w])
-		n += m
-		if err != nil {
-			return 0, n, err
-		}
-	}
-	data := vintData(b, w)
-	if vintDataAllOne(data, w) {
-		return 0, n, errors.New("VINT_DATA MUST NOT be set to all 1")
-	}
-	i := binary.BigEndian.Uint64(dataPad(b[:w]))
-	return schema.ElementID(i), n, nil
-}
-
-func dataPad(b []byte) []byte {
-	db := make([]byte, 8)
-	copy(db[8-len(b):], b)
-	return db
-}
-
-// ReadElementDataSize reads an Element ID based on
-// https://datatracker.ietf.org/doc/html/rfc8794#section-6
-func ReadElementDataSize(r io.Reader, maxSizeLength uint) (ds int64, n int, err error) {
-	b := make([]byte, maxSizeLength)
-	// TODO: EBMLMaxSizeLength can be greater than 8
-	//   https://datatracker.ietf.org/doc/html/rfc8794#section-11.2.5
-	n, err = r.Read(b[:1])
-	if err != nil {
-		return 0, n, err
-	}
-	w := vintOctetLength(b)
-	m, err := r.Read(b[1:w])
-	n += m
-	if err != nil {
-		return 0, n, err
-	}
-	d := vintData(b, w)
-	if vintDataAllOne(d, w) {
-		return -1, n, nil
-	}
-	i := binary.BigEndian.Uint64(dataPad(d))
-	return int64(i), n, nil
-}
+var ErrInvalidVINTLength = ebmltext.ErrInvalidVINTWidth

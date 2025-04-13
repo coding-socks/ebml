@@ -189,23 +189,19 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 	}
 
 	occurrences := make(map[schema.ElementID]int)
-	offsetStart := d.r.InputOffset()
 	offset := int64(0)
 	for {
-		el, _, err := d.NextOf(current, d.r.InputOffset()-offsetStart)
-		offset = d.r.InputOffset() - offsetStart
+		el, n, err := d.NextOf(current, offset)
+		offset += int64(n)
+		if errors.Is(err, ebmltext.ErrInvalidVINTWidth) {
+			d.r.Seek(1, io.SeekCurrent)
+			offset += 1
+			continue
+		}
+		if err == io.EOF {
+			break
+		}
 		if err != nil {
-			if err == ebmltext.ErrInvalidVINTWidth {
-				d.r.Seek(1, io.SeekCurrent)
-				continue
-			}
-			if err == io.EOF {
-				break
-			}
-			var e *UnknownElementError
-			if current.DataSize == -1 && errors.As(err, &e) {
-				break
-			}
 			return err
 		}
 		if current.DataSize != -1 {
