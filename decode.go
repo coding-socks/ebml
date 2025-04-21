@@ -193,7 +193,7 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 	for {
 		el, n, err := d.NextOf(current, offset)
 		offset += int64(n)
-		if errors.Is(err, ebmltext.ErrInvalidVINTWidth) {
+		if errors.Is(err, ErrInvalidVINTLength) {
 			d.r.Seek(1, io.SeekCurrent)
 			offset += 1
 			continue

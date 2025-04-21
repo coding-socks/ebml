@@ -166,6 +166,11 @@ func NewDecoder(r io.ReadSeeker) *Decoder {
 
 // Next reads the following element id and data size.
 // It must be called before Decode.
+//
+// When Next encounters an ErrInvalidVINTLength, it could be caused by
+// damaged data or garbage in the stream. It is up to the caller to decide if
+// they want to skip to the next element or move the reader forward
+// by seeking one byte using io.SeekCurrent whence.
 func (d *Decoder) Next() (el Element, n int, err error) {
 	el.ID, err = d.r.ReadElementID()
 	if err != nil {
@@ -184,8 +189,13 @@ func (d *Decoder) Next() (el Element, n int, err error) {
 // NextOf reads the following element id and data size
 // related to the given parent Element.
 //
-// When NextOf encounters an error or end-of-element condition it
-// return EOE error.
+// When NextOf encounters io.EOF or end-of-element condition, it
+// returns io.EOF.
+//
+// When NextOf encounters ErrElementOverflow fo known data size,
+// you can skip the parent object, or you can read until the parent ends.
+//
+// See Next about ErrInvalidVINTLength.
 func (d *Decoder) NextOf(parent Element, offset int64) (el Element, n int, err error) {
 	if end, err := d.EndOfKnownDataSize(parent, offset); err != nil {
 		return Element{}, 0, err
