@@ -15,6 +15,7 @@ import (
 	"iter"
 	"maps"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -40,24 +41,31 @@ func init() {
 }
 
 type Def struct {
-	m    map[schema.ElementID]schema.Element
-	Root schema.Element
+	m      map[schema.ElementID]schema.Element
+	mfield map[string][]schema.Element
+	Root   schema.Element
 }
 
 func NewDef(s schema.Schema) (*Def, error) {
 	def := Def{
-		m: make(map[schema.ElementID]schema.Element, len(s.Elements)),
+		m:      make(map[schema.ElementID]schema.Element, len(s.Elements)),
+		mfield: make(map[string][]schema.Element, len(s.Elements)),
 	}
 	set := make(map[schema.ElementID]bool, len(s.Elements))
+	var bodyRoots []schema.Element
 	for _, el := range s.Elements {
 		if el.Type == TypeMaster && el.Default != nil {
 			return nil, fmt.Errorf("ebml: master Element %v MUST NOT declare a default value.", el.ID)
 		}
 		set[el.ID] = true
 		def.m[el.ID] = el
-	}
-	var bodyRoots []schema.Element
-	for _, el := range def.m {
+
+		if el.Type != TypeMaster {
+			i := strings.LastIndex(el.Path, "\\")
+			parent := el.Path[:i]
+			def.mfield[parent] = append(def.mfield[parent], el)
+		}
+
 		if strings.Count(el.Path, "\\") == 1 && el.ID != IDVoid {
 			bodyRoots = append(bodyRoots, el)
 		}
@@ -78,6 +86,10 @@ func NewDef(s schema.Schema) (*Def, error) {
 func (d *Def) Get(id schema.ElementID) (schema.Element, bool) {
 	el, ok := d.m[id]
 	return el, ok
+}
+
+func (d *Def) Fields(path string) iter.Seq[schema.Element] {
+	return slices.Values(d.mfield[path])
 }
 
 func (d *Def) All() iter.Seq[schema.Element] {
