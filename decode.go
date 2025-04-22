@@ -122,12 +122,21 @@ func (d *Decoder) Decode(v interface{}) error {
 	if d.el == nil {
 		return fmt.Errorf("ebml: missing decoded element (forgotten call Next?)")
 	}
+	d.skippedErrs = nil
 	err := d.decodeSingle(*d.el, val.Elem())
 	d.el = nil
-	if err == nil && d.elOverflow {
-		return ErrElementOverflow
+	if d.skippedErrs != nil {
+		err = errors.Join(err, d.skippedErrs)
 	}
 	return err
+}
+
+// callVisitor calls the visitor if there is any and subtracts the header length from the offset.
+func (d *Decoder) callVisitor(el Element, offset int64, headerSize int, val any) {
+	if d.visitor == nil {
+		return
+	}
+	d.visitor = d.visitor.Visit(el, offset-int64(headerSize), headerSize, val)
 }
 
 var (
@@ -188,63 +197,9 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 		d.typeInfos[typ] = tinfo
 	}
 
-	occurrences := make(map[schema.ElementID]int)
-	offset := int64(0)
-	for {
-		el, n, err := d.NextOf(current, offset)
-		offset += int64(n)
-		if errors.Is(err, ErrInvalidVINTLength) {
-			d.r.Seek(1, io.SeekCurrent)
-			offset += 1
-			continue
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		if current.DataSize != -1 {
-			// detect element overflow early to pretend the element is smaller
-			if current.DataSize < offset+el.DataSize {
-				el.DataSize = current.DataSize - offset
-				d.elOverflow = true
-			}
-			offset += el.DataSize
-		}
-		def, _ := d.def.Get(el.ID)
-		occurrences[el.ID]++
-		fieldv, found := findField(val, tinfo, def.Name)
-		if !found {
-			if el.DataSize != -1 {
-				if _, err := d.Seek(el.DataSize, io.SeekCurrent); err != nil {
-					return fmt.Errorf("ebml: failed to skip element: %w", err)
-				}
-				continue
-			} else if def.Type == TypeMaster {
-				if err := d.decodeMaster(val, el); err != nil {
-					return err
-				}
-				continue
-			} else {
-				return errors.New("ebml: only a master element is allowed to be of unknown size")
-			}
-		}
-
-		if err := d.decodeSingle(el, fieldv); err != nil {
-			if e, ok := err.(*DecodeTypeError); ok {
-				e.extendError(val.Type().Name())
-			}
-			return err
-		}
-	}
-
-	if current.DataSize != -1 && offset < current.DataSize {
-		return io.ErrUnexpectedEOF
-	}
-
-	for sel := range d.def.All() {
-		if sel.Default == nil || occurrences[sel.ID] > 0 {
+	// Prepopulate the default values, they will be overwritten when defined.
+	for sel := range d.def.Fields(current.Schema.Path) {
+		if sel.Default == nil {
 			continue
 		}
 		fieldv, found := findField(val, tinfo, sel.Name)
@@ -293,6 +248,59 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 		default:
 			return fmt.Errorf("default not supported: %s", sel.Type)
 		}
+	}
+
+	offset := int64(0)
+	for {
+		el, n, err := d.NextOf(current, offset)
+		offset += int64(n)
+		if errors.Is(err, ErrInvalidVINTLength) {
+			d.r.Seek(1, io.SeekCurrent)
+			offset += 1
+			continue
+		}
+		if err == io.EOF {
+			break
+		}
+		// detect element overflow early to pretend the element is smaller
+		if errors.Is(err, ErrElementOverflow) {
+			el.DataSize = current.DataSize - offset
+			// This can be skipped
+			d.skippedErrs = errors.Join(err, d.skippedErrs)
+		} else if err != nil {
+			return err
+		}
+		if current.DataSize != -1 {
+			offset += el.DataSize
+		}
+		fieldv, found := findField(val, tinfo, el.Schema.Name)
+		if !found {
+			if el.DataSize != -1 {
+				if _, err := d.Seek(el.DataSize, io.SeekCurrent); err != nil {
+					return fmt.Errorf("ebml: failed to skip element: %w", err)
+				}
+				continue
+			} else if el.Schema.Type == TypeMaster {
+				if err := d.decodeMaster(val, el); err != nil {
+					return err
+				}
+				continue
+			} else {
+				return errors.New("ebml: only a master element is allowed to be of unknown size")
+			}
+		}
+
+		if err := d.decodeSingle(el, fieldv); err != nil {
+			var e *DecodeTypeError
+			if errors.As(err, &e) {
+				e.extendError(val.Type().Name())
+			}
+			return err
+		}
+	}
+
+	if current.DataSize != -1 && offset < current.DataSize {
+		return io.ErrUnexpectedEOF
 	}
 	return nil
 }
@@ -374,31 +382,33 @@ func validateReflectType(v reflect.Value, def schema.Element, position int64) er
 var DefaultAllocationWindow = int64(1<<24) - 1
 
 func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
-	def, _ := d.def.Get(el.ID)
 	if val.Kind() == reflect.Ptr {
 		if val.IsNil() {
 			val.Set(reflect.New(val.Type().Elem()))
 		}
 		val = val.Elem()
 	}
+	sch := el.Schema
 	if v := val; v.Kind() == reflect.Slice {
 		e := v.Type().Elem()
-		if !(def.Type == TypeBinary && e.Kind() == reflect.Uint8) {
+		if !(sch.Type == TypeBinary && e.Kind() == reflect.Uint8) {
 			n := v.Len()
 			v.Set(reflect.Append(v, reflect.Zero(e)))
 			val = v.Index(n)
 		}
 	}
-	if err := validateReflectType(val, def, 0); err != nil {
+	if err := validateReflectType(val, sch, 0); err != nil {
 		if e, ok := err.(*DecodeTypeError); ok {
-			e.extendError(def.Name)
+			e.extendError(sch.Name)
 		}
 		return err
 	}
 
-	if def.Type == TypeMaster {
+	if sch.Type == TypeMaster {
 		return d.decodeMaster(val, el)
 	}
+
+	pos := d.r.InputOffset()
 
 	if int64(cap(d.window)) < el.DataSize {
 		n := DefaultAllocationWindow
@@ -412,7 +422,7 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 		return err
 	}
 
-	switch def.Type {
+	switch sch.Type {
 	case TypeBinary:
 		switch val.Type() {
 		default:
@@ -470,5 +480,7 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 		}
 		val.SetString(str)
 	}
+
+	d.callVisitor(el, pos, d.n, val.Interface())
 	return nil
 }

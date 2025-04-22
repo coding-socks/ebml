@@ -21,6 +21,8 @@ import (
 	"sync"
 )
 
+var ErrInvalidVINTLength = ebmltext.ErrInvalidVINTWidth
+
 var (
 	docTypesMu sync.RWMutex
 	docTypes   = make(map[string]*Def)
@@ -143,6 +145,11 @@ func Definition(docType string) (*Def, error) {
 	return dt, nil
 }
 
+var UnknownSchema = schema.Element{
+	Name:          "Unknown element",
+	Documentation: []schema.Documentation{{Content: "The purpose of this object is to signal an error."}},
+}
+
 type Element struct {
 	ID schema.ElementID
 
@@ -151,6 +158,8 @@ type Element struct {
 	//
 	// With 8 octets it can have 2^56-2 possible values. That fits into int64.
 	DataSize int64
+
+	Schema schema.Element
 }
 
 // A Decoder represents an EBML parser reading a particular input stream.
@@ -159,11 +168,14 @@ type Decoder struct {
 	def *Def
 
 	el *Element
-	// elOverflow signals to return ErrElementOverflow at the end of decode.
-	elOverflow bool
+	n  int
+	// skippedErrs signals to return errors at the end of Decode.
+	skippedErrs error
 
 	window    []byte
 	typeInfos map[reflect.Type]*typeInfo
+
+	visitor Visitor
 }
 
 // NewDecoder reads and parses an EBML Document from r.
@@ -176,13 +188,17 @@ func NewDecoder(r io.ReadSeeker) *Decoder {
 	}
 }
 
+func (d *Decoder) SetVisitor(v Visitor) {
+	d.visitor = v
+}
+
 // Next reads the following element id and data size.
 // It must be called before Decode.
 //
-// When Next encounters an ErrInvalidVINTLength, it could be caused by
-// damaged data or garbage in the stream. It is up to the caller to decide if
-// they want to skip to the next element or move the reader forward
-// by seeking one byte using io.SeekCurrent whence.
+// When Next encounters an ErrInvalidVINTLength or the element has UnknownSchema,
+// it could be caused by damaged data or garbage in the stream. It is up
+// to the caller to decide if they want to skip to the next element or
+// move the reader forward by seeking one byte using io.SeekCurrent whence.
 func (d *Decoder) Next() (el Element, n int, err error) {
 	el.ID, err = d.r.ReadElementID()
 	if err != nil {
@@ -195,6 +211,16 @@ func (d *Decoder) Next() (el Element, n int, err error) {
 	}
 	n += d.r.Release()
 	d.el = &el
+	d.n = n
+	sch, ok := d.def.Get(el.ID)
+	if !ok {
+		el.Schema = UnknownSchema
+	} else {
+		el.Schema = sch
+	}
+	if sch.Type == TypeMaster {
+		d.callVisitor(el, d.r.InputOffset(), n, nil)
+	}
 	return el, n, err
 }
 
@@ -218,13 +244,14 @@ func (d *Decoder) NextOf(parent Element, offset int64) (el Element, n int, err e
 	if err != nil {
 		return Element{}, n, err
 	}
-	if end, err := d.EndOfUnknownDataSize(parent, el); err != nil {
-		return Element{}, n, err
-	} else if end {
+	if parent.DataSize != -1 && offset+el.DataSize > parent.DataSize {
+		err = ErrElementOverflow
+	}
+	if end, _ := d.EndOfUnknownDataSize(parent, el); end {
 		d.r.Seek(int64(-n), io.SeekCurrent)
 		return Element{}, 0, io.EOF
 	}
-	return el, n, nil
+	return el, n, err
 }
 
 func (d *Decoder) Seek(offset int64, whence int) (ret int64, err error) {
@@ -234,21 +261,11 @@ func (d *Decoder) Seek(offset int64, whence int) (ret int64, err error) {
 	return d.r.Seek(offset, whence)
 }
 
-type UnknownDefinitionError struct {
-	id schema.ElementID
-}
-
-func (u UnknownDefinitionError) ID() schema.ElementID {
-	return u.id
-}
-
-func (u UnknownDefinitionError) Error() string {
-	return fmt.Sprintf("ebml: element definition not found for %v", u.id)
-}
-
 // EndOfKnownDataSize tries to guess the end of an element which has a know data size.
 //
 // A parent with unknown data size won't raise an error but not handled as the end of the parent.
+//
+// TODO: consider removing error return value. ErrElementOverflow overflow should be detected early.
 func (d *Decoder) EndOfKnownDataSize(parent Element, offset int64) (bool, error) {
 	if parent.DataSize == -1 {
 		return false, nil
@@ -262,6 +279,8 @@ func (d *Decoder) EndOfKnownDataSize(parent Element, offset int64) (bool, error)
 // EndOfUnknownDataSize tries to guess the end of an element which has an unknown data size.
 //
 // A parent with known data size won't raise an error but not handled as the end of the parent.
+//
+// TODO: consider removing error return value.
 func (d *Decoder) EndOfUnknownDataSize(parent Element, el Element) (bool, error) {
 	if parent.DataSize != -1 {
 		return false, nil
@@ -269,15 +288,11 @@ func (d *Decoder) EndOfUnknownDataSize(parent Element, el Element) (bool, error)
 	if el.ID == IDCRC32 || el.ID == IDVoid { // global elements are child of anything
 		return false, nil
 	}
-	def, ok := d.def.Get(parent.ID)
-	if !ok {
-		return false, &UnknownDefinitionError{parent.ID}
-	}
-	nextDef, ok := d.def.Get(el.ID)
-	if !ok {
-		return false, &UnknownDefinitionError{el.ID}
-	}
-	return !strings.HasPrefix(nextDef.Path, def.Path) || len(nextDef.Path) == len(def.Path), nil
+	parentSch := parent.Schema
+	elSch := el.Schema
+	return !strings.HasPrefix(elSch.Path, parentSch.Path) || len(elSch.Path) == len(parentSch.Path), nil
 }
 
-var ErrInvalidVINTLength = ebmltext.ErrInvalidVINTWidth
+type Visitor interface {
+	Visit(el Element, offset int64, headerSize int, val any) (w Visitor)
+}
