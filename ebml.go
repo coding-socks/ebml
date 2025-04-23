@@ -178,7 +178,7 @@ type Decoder struct {
 	window    []byte
 	typeInfos map[reflect.Type]*typeInfo
 
-	visitor Visitor
+	callback Callbacker
 }
 
 // NewDecoder reads and parses an EBML Document from r.
@@ -191,8 +191,10 @@ func NewDecoder(r io.Reader) *Decoder {
 	}
 }
 
-func (d *Decoder) SetVisitor(v Visitor) {
-	d.visitor = v
+// SetCallback adds a Callbacker which is triggered when NextOf reads element id
+// and data size, and when a value is successfully decoded.
+func (d *Decoder) SetCallback(c Callbacker) {
+	d.callback = c
 }
 
 // next reads the following element id and data size.
@@ -219,8 +221,8 @@ func (d *Decoder) next() (el Element, n int, err error) {
 	} else {
 		el.Schema = sch
 	}
-	if sch.Type == TypeMaster {
-		d.callVisitor(el, d.r.InputOffset(), n, nil)
+	if d.callback != nil {
+		d.callback = d.callback.Found(el, d.r.InputOffset()-int64(n), n)
 	}
 	return el, n, err
 }
@@ -307,6 +309,9 @@ func (d *Decoder) EndOfUnknownDataSize(parent Element, el Element) bool {
 	return !strings.HasPrefix(elSch.Path, parentSch.Path) || len(elSch.Path) == len(parentSch.Path)
 }
 
-type Visitor interface {
-	Visit(el Element, offset int64, headerSize int, val any) (w Visitor)
+type Callbacker interface {
+	// Found is called whenever a new element is found in the target io.Reader.
+	Found(el Element, offset int64, headerSize int) Callbacker
+	// Decoded is called whenever an element is decoded from the target io.Reader.
+	Decoded(el Element, offset int64, headerSize int, val any) Callbacker
 }

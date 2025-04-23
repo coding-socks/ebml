@@ -138,14 +138,6 @@ func (d *Decoder) Decode(el Element, v interface{}) error {
 	return err
 }
 
-// callVisitor calls the visitor if there is any and subtracts the header length from the offset.
-func (d *Decoder) callVisitor(el Element, offset int64, headerSize int, val any) {
-	if d.visitor == nil {
-		return
-	}
-	d.visitor = d.visitor.Visit(el, offset-int64(headerSize), headerSize, val)
-}
-
 var (
 	typeTime      = reflect.TypeOf(time.Time{})
 	typeDuration  = reflect.TypeOf(time.Duration(0))
@@ -411,11 +403,15 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 		return err
 	}
 
-	if sch.Type == TypeMaster {
-		return d.decodeMaster(val, el)
-	}
-
 	pos := d.r.InputOffset()
+
+	if sch.Type == TypeMaster {
+		err := d.decodeMaster(val, el)
+		if d.callback != nil {
+			d.callback = d.callback.Decoded(el, pos-int64(d.n), d.n, val.Interface())
+		}
+		return err
+	}
 
 	if int64(cap(d.window)) < el.DataSize {
 		n := DefaultAllocationWindow
@@ -488,6 +484,8 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 		val.SetString(str)
 	}
 
-	d.callVisitor(el, pos, d.n, val.Interface())
+	if d.callback != nil {
+		d.callback = d.callback.Decoded(el, pos-int64(d.n), d.n, val.Interface())
+	}
 	return nil
 }
