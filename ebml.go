@@ -87,6 +87,9 @@ func NewDef(s schema.Schema) (*Def, error) {
 
 func (d *Def) Get(id schema.ElementID) (schema.Element, bool) {
 	el, ok := d.m[id]
+	if !ok {
+		el = UnknownSchema
+	}
 	return el, ok
 }
 
