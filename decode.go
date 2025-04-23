@@ -76,7 +76,7 @@ func (d *Decoder) DecodeHeader() (*EBML, error) {
 			d.r.MaxIDLength = DefaultMaxIDLength
 			d.r.MaxSizeLength = DefaultMaxSizeLength
 			var h EBML
-			err := d.Decode(&h)
+			err := d.Decode(el, &h)
 			if err != nil {
 				return nil, err
 			}
@@ -109,41 +109,29 @@ func (d *Decoder) DecodeBody(v interface{}) error {
 			}
 			continue
 		case d.def.Root.ID:
-			return d.Decode(v)
+			return d.Decode(el, v)
 		}
 	}
 }
 
 func (d *Decoder) SkipByte() error {
 	_, err := io.CopyN(io.Discard, d.r, 1)
-	d.delay = false
 	d.el = nil
 	return err
 }
 
-func (d *Decoder) Skip() error {
-	if d.el == nil {
-		return fmt.Errorf("ebml: missing decoded element (forgotten call Next?)")
-	}
-	_, err := io.CopyN(io.Discard, d.r, d.el.DataSize)
-	d.delay = false
-	d.el = nil
+func (d *Decoder) Skip(el Element) error {
+	_, err := io.CopyN(io.Discard, d.r, el.DataSize)
 	return err
 }
 
-func (d *Decoder) Decode(v interface{}) error {
+func (d *Decoder) Decode(el Element, v interface{}) error {
 	val := reflect.ValueOf(v)
 	if val.Kind() != reflect.Ptr || val.IsNil() {
 		return &InvalidDecodeError{reflect.TypeOf(v)}
 	}
-	if d.el == nil {
-		return fmt.Errorf("ebml: missing decoded element (forgotten call Next?)")
-	}
 	d.skippedErrs = nil
-	err := d.decodeSingle(*d.el, val.Elem())
-	if !d.delay {
-		d.el = nil
-	}
+	err := d.decodeSingle(el, val.Elem())
 	if d.skippedErrs != nil {
 		err = errors.Join(err, d.skippedErrs)
 	}

@@ -167,9 +167,8 @@ type Decoder struct {
 	r   *ebmltext.Decoder
 	def *Def
 
-	el    *Element
-	delay bool
-	n     int
+	el *Element
+	n  int
 	// skippedErrs signals to return errors at the end of Decode.
 	skippedErrs error
 
@@ -211,7 +210,6 @@ func (d *Decoder) Next() (el Element, n int, err error) {
 		return Element{}, n, err
 	}
 	n += d.r.Release()
-	d.el = &el
 	d.n = n
 	sch, ok := d.def.Get(el.ID)
 	if !ok {
@@ -239,20 +237,21 @@ func (d *Decoder) NextOf(parent Element, offset int64) (el Element, n int, err e
 	if end := d.EndOfKnownDataSize(parent, offset); end {
 		return Element{}, 0, io.EOF
 	}
-	if !d.delay {
+	if d.el != nil {
+		el = *d.el
+		d.el = nil
+	} else {
 		el, n, err = d.Next()
 		if err != nil {
 			return Element{}, n, err
 		}
-	} else {
-		d.delay = false
 	}
-	el = *d.el
 	if parent.DataSize != -1 && offset+el.DataSize > parent.DataSize {
 		err = ErrElementOverflow
 	}
 	if end := d.EndOfUnknownDataSize(parent, el); end {
-		d.delay = true
+		tmp := el // This is unexpected. I cannot use the pointer to the return parameter variable.
+		d.el = &tmp
 		return Element{}, 0, io.EOF
 	}
 	return el, n, err
@@ -274,7 +273,6 @@ type DecodeSeeker struct {
 func (s DecodeSeeker) Seek(offset int64, whence int) (ret int64, err error) {
 	d, ss := s.d, s.ss
 	if offset != 0 && whence != io.SeekCurrent {
-		d.delay = false
 		d.el = nil
 	}
 	return ss.Seek(offset, whence)
