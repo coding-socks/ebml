@@ -235,9 +235,7 @@ func (d *Decoder) Next() (el Element, n int, err error) {
 //
 // See Next about ErrInvalidVINTLength.
 func (d *Decoder) NextOf(parent Element, offset int64) (el Element, n int, err error) {
-	if end, err := d.EndOfKnownDataSize(parent, offset); err != nil {
-		return Element{}, 0, err
-	} else if end {
+	if end := d.EndOfKnownDataSize(parent, offset); end {
 		return Element{}, 0, io.EOF
 	}
 	el, n, err = d.Next()
@@ -247,7 +245,7 @@ func (d *Decoder) NextOf(parent Element, offset int64) (el Element, n int, err e
 	if parent.DataSize != -1 && offset+el.DataSize > parent.DataSize {
 		err = ErrElementOverflow
 	}
-	if end, _ := d.EndOfUnknownDataSize(parent, el); end {
+	if end := d.EndOfUnknownDataSize(parent, el); end {
 		d.r.Seek(int64(-n), io.SeekCurrent)
 		return Element{}, 0, io.EOF
 	}
@@ -264,33 +262,26 @@ func (d *Decoder) Seek(offset int64, whence int) (ret int64, err error) {
 // EndOfKnownDataSize tries to guess the end of an element which has a know data size.
 //
 // A parent with unknown data size won't raise an error but not handled as the end of the parent.
-//
-// TODO: consider removing error return value. ErrElementOverflow overflow should be detected early.
-func (d *Decoder) EndOfKnownDataSize(parent Element, offset int64) (bool, error) {
+func (d *Decoder) EndOfKnownDataSize(parent Element, offset int64) bool {
 	if parent.DataSize == -1 {
-		return false, nil
+		return false
 	}
-	if offset > parent.DataSize {
-		return true, ErrElementOverflow
-	}
-	return offset == parent.DataSize, nil
+	return offset >= parent.DataSize
 }
 
 // EndOfUnknownDataSize tries to guess the end of an element which has an unknown data size.
 //
 // A parent with known data size won't raise an error but not handled as the end of the parent.
-//
-// TODO: consider removing error return value.
-func (d *Decoder) EndOfUnknownDataSize(parent Element, el Element) (bool, error) {
+func (d *Decoder) EndOfUnknownDataSize(parent Element, el Element) bool {
 	if parent.DataSize != -1 {
-		return false, nil
+		return false
 	}
 	if el.ID == IDCRC32 || el.ID == IDVoid { // global elements are child of anything
-		return false, nil
+		return false
 	}
 	parentSch := parent.Schema
 	elSch := el.Schema
-	return !strings.HasPrefix(elSch.Path, parentSch.Path) || len(elSch.Path) == len(parentSch.Path), nil
+	return !strings.HasPrefix(elSch.Path, parentSch.Path) || len(elSch.Path) == len(parentSch.Path)
 }
 
 type Visitor interface {
