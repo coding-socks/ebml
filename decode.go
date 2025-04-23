@@ -59,7 +59,7 @@ var ErrElementOverflow = errors.New("ebml: element overflow")
 // DecodeHeader decodes the document header.
 func (d *Decoder) DecodeHeader() (*EBML, error) {
 	for {
-		el, _, err := d.Next()
+		el, _, err := d.NextOf(RootEl, 0)
 		if err != nil {
 			return nil, err
 		}
@@ -96,7 +96,7 @@ func (d *Decoder) DecodeHeader() (*EBML, error) {
 // an InvalidDecodeError.
 func (d *Decoder) DecodeBody(v interface{}) error {
 	for {
-		el, _, err := d.Next()
+		el, _, err := d.NextOf(RootEl, 0)
 		if err != nil {
 			return err
 		}

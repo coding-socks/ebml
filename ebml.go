@@ -195,14 +195,13 @@ func (d *Decoder) SetVisitor(v Visitor) {
 	d.visitor = v
 }
 
-// Next reads the following element id and data size.
-// It must be called before Decode.
+// next reads the following element id and data size.
 //
-// When Next encounters an ErrInvalidVINTLength or the element has UnknownSchema,
+// When next encounters an ErrInvalidVINTLength or the element has UnknownSchema,
 // it could be caused by damaged data or garbage in the stream. It is up
 // to the caller to decide if they want to skip to the next element or
 // move the reader forward by seeking one byte using io.SeekCurrent whence.
-func (d *Decoder) Next() (el Element, n int, err error) {
+func (d *Decoder) next() (el Element, n int, err error) {
 	el.ID, err = d.r.ReadElementID()
 	if err != nil {
 		return Element{}, n, err
@@ -226,6 +225,8 @@ func (d *Decoder) Next() (el Element, n int, err error) {
 	return el, n, err
 }
 
+var RootEl = Element{DataSize: -1}
+
 // NextOf reads the following element id and data size
 // related to the given parent Element.
 //
@@ -244,7 +245,7 @@ func (d *Decoder) NextOf(parent Element, offset int64) (el Element, n int, err e
 		el = *d.el
 		d.el = nil
 	} else {
-		el, n, err = d.Next()
+		el, n, err = d.next()
 		if err != nil {
 			return Element{}, n, err
 		}
