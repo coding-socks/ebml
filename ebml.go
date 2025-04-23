@@ -180,7 +180,7 @@ type Decoder struct {
 }
 
 // NewDecoder reads and parses an EBML Document from r.
-func NewDecoder(r io.ReadSeeker) *Decoder {
+func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{
 		r:   ebmltext.NewDecoder(r),
 		def: HeaderDef,
@@ -258,12 +258,26 @@ func (d *Decoder) NextOf(parent Element, offset int64) (el Element, n int, err e
 	return el, n, err
 }
 
-func (d *Decoder) Seek(offset int64, whence int) (ret int64, err error) {
+func (d *Decoder) AsSeeker() (io.Seeker, bool) {
+	s, ok := d.r.AsSeeker()
+	if !ok {
+		return nil, false
+	}
+	return DecodeSeeker{d: d, ss: s}, ok
+}
+
+type DecodeSeeker struct {
+	d  *Decoder
+	ss io.Seeker
+}
+
+func (s DecodeSeeker) Seek(offset int64, whence int) (ret int64, err error) {
+	d, ss := s.d, s.ss
 	if offset != 0 && whence != io.SeekCurrent {
 		d.delay = false
 		d.el = nil
 	}
-	return d.r.Seek(offset, whence)
+	return ss.Seek(offset, whence)
 }
 
 // EndOfKnownDataSize tries to guess the end of an element which has a know data size.

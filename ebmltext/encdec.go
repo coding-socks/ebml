@@ -31,7 +31,7 @@ type Decoder struct {
 	r byteReader
 }
 
-func NewDecoder(r io.ReadSeeker) *Decoder {
+func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{
 		MaxIDLength:   8,
 		MaxSizeLength: 8,
@@ -112,9 +112,23 @@ func (d *Decoder) Read(b []byte) (int, error) {
 	return n, err
 }
 
-func (d *Decoder) Seek(offset int64, whence int) (int64, error) {
-	start, _ := d.r.Seek(0, io.SeekCurrent)
-	end, err := d.r.Seek(offset, whence)
+func (d *Decoder) AsSeeker() (io.Seeker, bool) {
+	s, ok := d.r.AsSeeker()
+	if !ok {
+		return nil, false
+	}
+	return DecodeSeeker{d: d, ss: s}, ok
+}
+
+type DecodeSeeker struct {
+	d  *Decoder
+	ss io.Seeker
+}
+
+func (s DecodeSeeker) Seek(offset int64, whence int) (int64, error) {
+	d, ss := s.d, s.ss
+	start, _ := ss.Seek(0, io.SeekCurrent)
+	end, err := ss.Seek(offset, whence)
 	d.offset += end - start
 	return end, err
 }

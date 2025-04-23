@@ -9,7 +9,7 @@ import (
 type byteReader struct {
 	data   []byte
 	offset int
-	r      io.ReadSeeker
+	r      io.Reader
 	err    error
 }
 
@@ -82,15 +82,33 @@ func (b *byteReader) reset() {
 func (b *byteReader) Read(buf []byte) (int, error) {
 	window := b.window()
 	n, err := io.MultiReader(bytes.NewReader(window), b.r).Read(buf)
-	b.release(n)
+	if n > len(window) {
+		b.reset()
+	} else {
+		b.release(n)
+	}
 	return n, err
 }
 
-func (b *byteReader) Seek(offset int64, whence int) (int64, error) {
+func (b *byteReader) AsSeeker() (io.Seeker, bool) {
+	s, ok := b.r.(io.Seeker)
+	if !ok {
+		return nil, false
+	}
+	return byteReaderSeeker{b: b, r: s}, ok
+}
+
+type byteReaderSeeker struct {
+	b *byteReader
+	r io.Seeker
+}
+
+func (s byteReaderSeeker) Seek(offset int64, whence int) (int64, error) {
+	b, r := s.b, s.r
 	if whence == io.SeekCurrent && int(offset) < (len(b.data)-b.offset) {
 		b.release(int(offset))
 
-		n, err := b.r.Seek(0, whence)
+		n, err := r.Seek(0, whence)
 		if err != nil {
 			return n, err
 		}
@@ -104,5 +122,5 @@ func (b *byteReader) Seek(offset int64, whence int) (int64, error) {
 	if whence != io.SeekCurrent && len(b.data) != 0 {
 		b.reset()
 	}
-	return b.r.Seek(offset, whence)
+	return r.Seek(offset, whence)
 }

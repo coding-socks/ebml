@@ -67,7 +67,7 @@ func (d *Decoder) DecodeHeader() (*EBML, error) {
 		default:
 			return nil, fmt.Errorf("ebml: unexpected element %v in root", el.ID)
 		case IDVoid:
-			if _, err := d.Seek(el.DataSize, io.SeekCurrent); err != nil {
+			if _, err := io.CopyN(io.Discard, d.r, el.DataSize); err != nil {
 				return nil, fmt.Errorf("ebml: could not skip Void element: %w", err)
 			}
 			continue
@@ -104,7 +104,7 @@ func (d *Decoder) DecodeBody(v interface{}) error {
 		default:
 			return fmt.Errorf("ebml: unexpected element %v in root", el.ID)
 		case IDVoid:
-			if _, err := d.Seek(el.DataSize, io.SeekCurrent); err != nil {
+			if _, err := io.CopyN(io.Discard, d.r, el.DataSize); err != nil {
 				return fmt.Errorf("ebml: could not skip Void element: %w", err)
 			}
 			continue
@@ -112,6 +112,23 @@ func (d *Decoder) DecodeBody(v interface{}) error {
 			return d.Decode(v)
 		}
 	}
+}
+
+func (d *Decoder) SkipByte() error {
+	_, err := io.CopyN(io.Discard, d.r, 1)
+	d.delay = false
+	d.el = nil
+	return err
+}
+
+func (d *Decoder) Skip() error {
+	if d.el == nil {
+		return fmt.Errorf("ebml: missing decoded element (forgotten call Next?)")
+	}
+	_, err := io.CopyN(io.Discard, d.r, d.el.DataSize)
+	d.delay = false
+	d.el = nil
+	return err
 }
 
 func (d *Decoder) Decode(v interface{}) error {
@@ -124,8 +141,9 @@ func (d *Decoder) Decode(v interface{}) error {
 	}
 	d.skippedErrs = nil
 	err := d.decodeSingle(*d.el, val.Elem())
-	d.delay = false
-	d.el = nil
+	if !d.delay {
+		d.el = nil
+	}
 	if d.skippedErrs != nil {
 		err = errors.Join(err, d.skippedErrs)
 	}
@@ -256,7 +274,7 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 		el, n, err := d.NextOf(current, offset)
 		offset += int64(n)
 		if errors.Is(err, ErrInvalidVINTLength) {
-			d.r.Seek(1, io.SeekCurrent)
+			_ = d.SkipByte()
 			offset += 1
 			continue
 		}
@@ -277,7 +295,7 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 		fieldv, found := findField(val, tinfo, el.Schema.Name)
 		if !found {
 			if el.DataSize != -1 {
-				if _, err := d.Seek(el.DataSize, io.SeekCurrent); err != nil {
+				if _, err := io.CopyN(io.Discard, d.r, el.DataSize); err != nil {
 					return fmt.Errorf("ebml: failed to skip element: %w", err)
 				}
 				continue
