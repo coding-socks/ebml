@@ -225,7 +225,7 @@ func (d *Decoder) next() (el Element, n int, err error) {
 	return el, n, err
 }
 
-var RootEl = Element{DataSize: -1}
+var RootEl = Element{DataSize: -1, Schema: schema.Element{Name: "root", Type: TypeMaster}}
 
 // NextOf reads the following element id and data size
 // related to the given parent Element.
