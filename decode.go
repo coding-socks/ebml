@@ -124,6 +124,7 @@ func (d *Decoder) Decode(v interface{}) error {
 	}
 	d.skippedErrs = nil
 	err := d.decodeSingle(*d.el, val.Elem())
+	d.delay = false
 	d.el = nil
 	if d.skippedErrs != nil {
 		err = errors.Join(err, d.skippedErrs)

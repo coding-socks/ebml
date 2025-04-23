@@ -167,8 +167,9 @@ type Decoder struct {
 	r   *ebmltext.Decoder
 	def *Def
 
-	el *Element
-	n  int
+	el    *Element
+	delay bool
+	n     int
 	// skippedErrs signals to return errors at the end of Decode.
 	skippedErrs error
 
@@ -238,15 +239,20 @@ func (d *Decoder) NextOf(parent Element, offset int64) (el Element, n int, err e
 	if end := d.EndOfKnownDataSize(parent, offset); end {
 		return Element{}, 0, io.EOF
 	}
-	el, n, err = d.Next()
-	if err != nil {
-		return Element{}, n, err
+	if !d.delay {
+		el, n, err = d.Next()
+		if err != nil {
+			return Element{}, n, err
+		}
+	} else {
+		d.delay = false
 	}
+	el = *d.el
 	if parent.DataSize != -1 && offset+el.DataSize > parent.DataSize {
 		err = ErrElementOverflow
 	}
 	if end := d.EndOfUnknownDataSize(parent, el); end {
-		d.r.Seek(int64(-n), io.SeekCurrent)
+		d.delay = true
 		return Element{}, 0, io.EOF
 	}
 	return el, n, err
@@ -254,6 +260,7 @@ func (d *Decoder) NextOf(parent Element, offset int64) (el Element, n int, err e
 
 func (d *Decoder) Seek(offset int64, whence int) (ret int64, err error) {
 	if offset != 0 && whence != io.SeekCurrent {
+		d.delay = false
 		d.el = nil
 	}
 	return d.r.Seek(offset, whence)
