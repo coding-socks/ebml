@@ -13,7 +13,7 @@ An EBML parser written in Go.
 
 Source: https://en.wikipedia.org/wiki/Extensible_Binary_Meta_Language
 
-This library is based on the July 2020 version of [RFC 8794][rfc8794] (with additions from [github.com/ietf-wg-cellar/ebml-specification][ebml-specification]). This document did not reach ["Internet Standard"](https://datatracker.ietf.org/doc/html/rfc2026#section-4.1.3) status yet. RFC 8794 is in a ["Proposed Standard"](https://datatracker.ietf.org/doc/html/rfc2026#section-4.1.1) status.
+This library is based on the July 2020 version of [RFC 8794][rfc8794] (with additions from [github.com/ietf-wg-cellar/ebml-specification][ebml-specification]). This document reached ["Internet Standard"](https://datatracker.ietf.org/doc/html/rfc2026#section-4.1.3) status.
 
 The goal of this project is to create an implementation based on the document and during the implementation provide feedback.
 
