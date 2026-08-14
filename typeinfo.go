@@ -86,4 +86,5 @@ var (
 	TypeUTF8     = "utf-8"
 	TypeMaster   = "master"
 	TypeBinary   = "binary"
+	TypeInvalid  = ""
 )

@@ -3,12 +3,13 @@ package ebml
 import (
 	"errors"
 	"fmt"
-	"github.com/coding-socks/ebml/ebmltext"
-	"github.com/coding-socks/ebml/schema"
 	"io"
 	"reflect"
 	"strconv"
 	"time"
+
+	"github.com/coding-socks/ebml/ebmltext"
+	"github.com/coding-socks/ebml/schema"
 )
 
 // An DecodeTypeError describes an EBML value that was
@@ -118,6 +119,20 @@ func (d *Decoder) SkipByte() error {
 	_, err := io.CopyN(io.Discard, d.r, 1)
 	d.el = nil
 	return err
+}
+
+// SetDef sets the schema definition used for element lookup. Call this after
+// reading the DocType element to switch from the header definition to the
+// document-type-specific definition.
+func (d *Decoder) SetDef(def *Def) {
+	d.def = def
+}
+
+// SetLimits sets the maximum ID and size lengths used when reading elements.
+// The EBML spec defaults are MaxIDLength=4, MaxSizeLength=8.
+func (d *Decoder) SetLimits(maxIDLength, maxSizeLength uint) {
+	d.r.MaxIDLength = maxIDLength
+	d.r.MaxSizeLength = maxSizeLength
 }
 
 func (d *Decoder) Skip(el Element) error {
@@ -253,11 +268,6 @@ func (d *Decoder) decodeMaster(val reflect.Value, current Element) error {
 	for {
 		el, n, err := d.NextOf(current, offset)
 		offset += int64(n)
-		if errors.Is(err, ErrInvalidVINTLength) {
-			_ = d.SkipByte()
-			offset += 1
-			continue
-		}
 		if err == io.EOF {
 			break
 		}
@@ -403,13 +413,8 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 		return err
 	}
 
-	pos := d.r.InputOffset()
-
 	if sch.Type == TypeMaster {
 		err := d.decodeMaster(val, el)
-		if d.callback != nil {
-			d.callback = d.callback.Decoded(el, pos-int64(d.n), d.n, val.Interface())
-		}
 		return err
 	}
 
@@ -484,8 +489,5 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 		val.SetString(str)
 	}
 
-	if d.callback != nil {
-		d.callback = d.callback.Decoded(el, pos-int64(d.n), d.n, val.Interface())
-	}
 	return nil
 }

@@ -9,8 +9,6 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"github.com/coding-socks/ebml/ebmltext"
-	"github.com/coding-socks/ebml/schema"
 	"io"
 	"iter"
 	"maps"
@@ -19,6 +17,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/coding-socks/ebml/ebmltext"
+	"github.com/coding-socks/ebml/schema"
 )
 
 var ErrInvalidVINTLength = ebmltext.ErrInvalidVINTWidth
@@ -163,6 +164,8 @@ type Element struct {
 	DataSize int64
 
 	Schema schema.Element
+
+	Pos int64
 }
 
 // A Decoder represents an EBML parser reading a particular input stream.
@@ -177,8 +180,6 @@ type Decoder struct {
 
 	window    []byte
 	typeInfos map[reflect.Type]*typeInfo
-
-	callback Callbacker
 }
 
 // NewDecoder reads and parses an EBML Document from r.
@@ -191,38 +192,37 @@ func NewDecoder(r io.Reader) *Decoder {
 	}
 }
 
-// SetCallback adds a Callbacker which is triggered when NextOf reads element id
-// and data size, and when a value is successfully decoded.
-func (d *Decoder) SetCallback(c Callbacker) {
-	d.callback = c
-}
-
 // next reads the following element id and data size.
 //
 // When next encounters an ErrInvalidVINTLength or the element has UnknownSchema,
 // it could be caused by damaged data or garbage in the stream. It is up
 // to the caller to decide if they want to skip to the next element or
-// move the reader forward by seeking one byte using io.SeekCurrent whence.
+// move the reader forward by seeking one byte passing the returned element
+// to Skip.
 func (d *Decoder) next() (el Element, n int, err error) {
+	pos := d.r.InputOffset()
+	el.Pos = pos
+	el.Schema = UnknownSchema
 	el.ID, err = d.r.ReadElementID()
+	if errors.Is(err, ErrInvalidVINTLength) {
+		// Leave the byte in the stream as the element body (DataSize=1).
+		// The caller is responsible for consuming it, just like any leaf element.
+		el.DataSize = 1
+		return el, n, err
+	}
 	if err != nil {
-		return Element{}, n, err
+		return el, n, err
 	}
 	n += d.r.Release()
 	el.DataSize, err = d.r.ReadElementDataSize()
 	if err != nil {
-		return Element{}, n, err
+		return el, n, err
 	}
 	n += d.r.Release()
 	d.n = n
 	sch, ok := d.def.Get(el.ID)
-	if !ok {
-		el.Schema = UnknownSchema
-	} else {
+	if ok {
 		el.Schema = sch
-	}
-	if d.callback != nil {
-		d.callback = d.callback.Found(el, d.r.InputOffset()-int64(n), n)
 	}
 	return el, n, err
 }
@@ -248,6 +248,9 @@ func (d *Decoder) NextOf(parent Element, offset int64) (el Element, n int, err e
 		d.el = nil
 	} else {
 		el, n, err = d.next()
+		if errors.Is(err, ErrInvalidVINTLength) {
+			return el, n, nil
+		}
 		if err != nil {
 			return Element{}, n, err
 		}
