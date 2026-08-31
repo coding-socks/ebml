@@ -57,6 +57,12 @@ func (e *InvalidDecodeError) Error() string {
 // greater than the parent DataSize.
 var ErrElementOverflow = errors.New("ebml: element overflow")
 
+// Unmarshaler is implemented by types that decode their element body
+// themselves instead of the default reflect-based mapping.
+type Unmarshaler interface {
+	UnmarshalEBML(d *Decoder, el Element) error
+}
+
 // DecodeHeader decodes the document header.
 func (d *Decoder) DecodeHeader() (*EBML, error) {
 	for {
@@ -404,6 +410,11 @@ func (d *Decoder) decodeSingle(el Element, val reflect.Value) error {
 			n := v.Len()
 			v.Set(reflect.Append(v, reflect.Zero(e)))
 			val = v.Index(n)
+		}
+	}
+	if val.CanAddr() {
+		if u, ok := val.Addr().Interface().(Unmarshaler); ok {
+			return u.UnmarshalEBML(d, el)
 		}
 	}
 	if err := validateReflectType(val, sch, 0); err != nil {
